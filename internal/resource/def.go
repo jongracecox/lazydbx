@@ -79,6 +79,25 @@ type Action struct {
 	Run func(ctx context.Context, c *dbx.Clients, scope Scope, row Row) any
 }
 
+// CellClass is a semantic classification of a rendered cell value, mapped
+// to theme styles by the table component (defs know values, not colors).
+type CellClass int
+
+// Cell classes.
+const (
+	CellDefault CellClass = iota
+	CellGood              // e.g. SUCCESS, RUNNING pipeline in healthy state
+	CellBad               // e.g. FAILED, INTERNAL_ERROR
+	CellWarn              // e.g. CANCELED, TIMEDOUT, SKIPPED
+	CellRunning           // e.g. RUNNING, PENDING — in-flight states
+)
+
+// Styler is optionally implemented by defs whose cells deserve semantic
+// coloring (run states, health columns). col indexes into Columns().
+type Styler interface {
+	CellClass(col int, value string) CellClass
+}
+
 // Def is the interface every browsable resource implements.
 type Def interface {
 	// Name is the canonical command name, e.g. "tables".

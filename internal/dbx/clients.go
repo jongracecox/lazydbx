@@ -36,6 +36,8 @@ type DAOs struct {
 	Tables     TablesDAO
 	Warehouses WarehousesDAO
 	Statements StatementDAO
+	Jobs       JobsDAO
+	Pipelines  PipelinesDAO
 }
 
 // NewClients wraps a profile; no network I/O happens until first use.
@@ -126,6 +128,30 @@ func (c *Clients) Statements() (StatementDAO, error) {
 		return nil, err
 	}
 	return statementDAO{w: w}, nil
+}
+
+// Jobs returns the jobs DAO.
+func (c *Clients) Jobs() (JobsDAO, error) {
+	if c.daos.Jobs != nil {
+		return c.daos.Jobs, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return jobsDAO{w: w}, nil
+}
+
+// Pipelines returns the pipelines DAO.
+func (c *Clients) Pipelines() (PipelinesDAO, error) {
+	if c.daos.Pipelines != nil {
+		return c.daos.Pipelines, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return pipelinesDAO{w: w}, nil
 }
 
 // Pool caches one Clients per profile name.

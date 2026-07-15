@@ -127,3 +127,68 @@ type StatementDAO interface {
 	Poll(ctx context.Context, statementID string) (StatementPoll, error)
 	Cancel(ctx context.Context, statementID string) error
 }
+
+// Job is a Databricks job, reduced to list-view needs.
+type Job struct {
+	ID        int64     `yaml:"id" json:"id"`
+	Name      string    `yaml:"name" json:"name"`
+	Schedule  string    `yaml:"schedule,omitempty" json:"schedule,omitempty"` // cron / trigger summary, "(paused)" suffix when paused
+	Creator   string    `yaml:"creator,omitempty" json:"creator,omitempty"`
+	CreatedAt time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+}
+
+// Run is one job run.
+type Run struct {
+	ID        int64         `yaml:"id" json:"id"`
+	State     string        `yaml:"state" json:"state"`   // lifecycle: PENDING, RUNNING, TERMINATED, ...
+	Result    string        `yaml:"result" json:"result"` // SUCCESS, FAILED, CANCELED, ... ("" while running)
+	Trigger   string        `yaml:"trigger,omitempty" json:"trigger,omitempty"`
+	StartedAt time.Time     `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	Duration  time.Duration `yaml:"duration,omitempty" json:"duration,omitempty"`
+}
+
+// TaskRun is one task within a job run. RunID is the task-level run id —
+// the id GetRunOutput requires (NOT the parent job run id).
+type TaskRun struct {
+	RunID     int64         `yaml:"run_id" json:"run_id"`
+	Key       string        `yaml:"key" json:"key"`
+	State     string        `yaml:"state" json:"state"`
+	Result    string        `yaml:"result" json:"result"`
+	StartedAt time.Time     `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	Duration  time.Duration `yaml:"duration,omitempty" json:"duration,omitempty"`
+}
+
+// JobsDAO covers the jobs → runs → task runs → output drill-down.
+type JobsDAO interface {
+	List(ctx context.Context) ([]Job, error)
+	ListRuns(ctx context.Context, jobID int64, limit int) ([]Run, error)
+	GetRunTasks(ctx context.Context, runID int64) ([]TaskRun, error)
+	// GetRunOutput returns the task run's combined output as display text:
+	// logs, notebook exit value, and error + trace when present.
+	GetRunOutput(ctx context.Context, taskRunID int64) (string, error)
+}
+
+// Pipeline is a Lakeflow/DLT pipeline.
+type Pipeline struct {
+	ID     string `yaml:"id" json:"id"`
+	Name   string `yaml:"name" json:"name"`
+	State  string `yaml:"state" json:"state"`
+	Health string `yaml:"health,omitempty" json:"health,omitempty"`
+}
+
+// PipelineUpdate is one update (execution) of a pipeline.
+type PipelineUpdate struct {
+	ID        string    `yaml:"id" json:"id"`
+	State     string    `yaml:"state" json:"state"`
+	Cause     string    `yaml:"cause,omitempty" json:"cause,omitempty"`
+	CreatedAt time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+}
+
+// PipelinesDAO covers pipelines → updates → event log.
+type PipelinesDAO interface {
+	List(ctx context.Context) ([]Pipeline, error)
+	ListUpdates(ctx context.Context, pipelineID string, limit int) ([]PipelineUpdate, error)
+	// Events returns the pipeline event log rendered as display text,
+	// oldest first (one line per event: timestamp, level, message).
+	Events(ctx context.Context, pipelineID string, maxResults int) (string, error)
+}

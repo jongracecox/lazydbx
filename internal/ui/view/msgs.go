@@ -1,6 +1,8 @@
 package view
 
 import (
+	"context"
+
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/resource"
 	"github.com/jongracecox/lazydbx/internal/ui/component"
@@ -47,4 +49,14 @@ type ProfileSelectedMsg struct{ Profile dbx.Profile }
 type OpenSQLMsg struct {
 	Query   string
 	Execute bool
+}
+
+// OpenLogMsg asks the app to open the log viewer on a text source. Fetch is
+// re-invoked while following, so it must be safe to call repeatedly. This is
+// how resource actions (task-run logs, pipeline events) launch the viewer
+// without constructing views themselves.
+type OpenLogMsg struct {
+	Title  string
+	Follow bool // start with follow-tail enabled (for in-flight runs)
+	Fetch  func(ctx context.Context) (string, error)
 }
