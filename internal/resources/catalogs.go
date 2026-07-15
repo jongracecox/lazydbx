@@ -28,8 +28,7 @@ func (CatalogsDef) Args() []string              { return nil }
 func (CatalogsDef) Columns() []resource.Column  { return resource.Cols(catalogCols) }
 func (CatalogsDef) PollInterval() time.Duration { return 30 * time.Second }
 
-// Child returns "" until the schemas resource lands in Phase 2.
-func (CatalogsDef) Child() string { return "" }
+func (CatalogsDef) Child() string { return "schemas" }
 
 func (CatalogsDef) ChildScope(parent resource.Scope, row resource.Row) resource.Scope {
 	return parent.Merge("catalog", row.ID)
@@ -49,7 +48,7 @@ func (CatalogsDef) List(ctx context.Context, c *dbx.Clients, _ resource.Scope) (
 	return resource.BuildRows(items, func(c dbx.Catalog) string { return c.Name }, catalogCols), nil
 }
 
-func (CatalogsDef) Describe(_ context.Context, _ *dbx.Clients, row resource.Row) (any, error) {
+func (CatalogsDef) Describe(_ context.Context, _ *dbx.Clients, _ resource.Scope, row resource.Row) (any, error) {
 	return row.Data, nil
 }
 

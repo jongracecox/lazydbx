@@ -100,5 +100,5 @@ type Def interface {
 	ChildScope(parent Scope, row Row) Scope
 	Actions() []Action
 	// Describe returns the detail object rendered by the describe view.
-	Describe(ctx context.Context, c *dbx.Clients, row Row) (any, error)
+	Describe(ctx context.Context, c *dbx.Clients, scope Scope, row Row) (any, error)
 }

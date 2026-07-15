@@ -28,7 +28,7 @@ func newHarness() *harness {
 		tickCh: make(chan time.Time),
 		armCh:  make(chan time.Duration, 100),
 	}
-	h.eng = New(func(ev DataEvent) { h.evCh <- ev })
+	h.eng = New(func(ev DataEvent) { h.evCh <- ev }, nil)
 	h.eng.now = func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) }
 	h.eng.after = func(d time.Duration) <-chan time.Time {
 		h.armCh <- d

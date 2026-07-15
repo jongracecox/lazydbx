@@ -12,19 +12,47 @@ import (
 // hintRows is how many rows the key-hint block may occupy.
 const hintRows = 3
 
-// Header renders the top chrome: identity line plus a k9s-style grid of the
-// key hints valid right now.
-func Header(th theme.Theme, width int, context string, badges []string, hints []key.Binding) string {
-	var b strings.Builder
+// banner is the top-right logo, k9s-style. Shown only on terminals with
+// room to spare.
+const banner = `▄▄                   ▄▄▄▄▄▄   ▄▄▄▄▄▄▄   ▄▄▄   ▄▄▄
+██                   ███▀▀██▄ ███▀▀███▄ ████▄████
+██  ▀▀█▄ ▀▀▀██ ██ ██ ███  ███ ███▄▄███▀  ▀█████▀
+██ ▄█▀██   ▄█▀ ██▄██ ███  ███ ███  ███▄ ▄███████▄
+██ ▀█▄██ ▄██▄▄  ▀██▀ ██████▀  ████████▀ ███▀ ▀███
+                 ██
+               ▀▀▀`
 
+// Banner display thresholds.
+const (
+	bannerMinWidth  = 100
+	bannerMinHeight = 24
+)
+
+// Header renders the top chrome: identity line plus a k9s-style grid of the
+// key hints valid right now, with the logo banner on the right when the
+// terminal has room. Its height varies — measure with lipgloss.Height.
+func Header(th theme.Theme, width, height int, context string, badges []string, hints []key.Binding) string {
+	contentWidth := width
+	var bannerBlock string
+	if width >= bannerMinWidth && height >= bannerMinHeight {
+		bannerBlock = th.Logo.Render(banner)
+		contentWidth = width - lipgloss.Width(banner) - 2
+	}
+
+	var b strings.Builder
 	line := th.Logo.Render(" lazydbx ") + " " + th.Title.Render(context)
 	for _, badge := range badges {
 		line += "  " + th.Warning.Render("["+badge+"]")
 	}
-	b.WriteString(lipgloss.NewStyle().MaxWidth(width).Render(line))
+	b.WriteString(lipgloss.NewStyle().MaxWidth(contentWidth).Render(line))
 	b.WriteString("\n")
-	b.WriteString(renderHints(th, width, hints))
-	return b.String()
+	b.WriteString(renderHints(th, contentWidth, hints))
+
+	if bannerBlock == "" {
+		return b.String()
+	}
+	left := lipgloss.NewStyle().Width(contentWidth + 2).Render(b.String())
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, bannerBlock)
 }
 
 // renderHints lays bindings out in columns, k9s-style: fill down each

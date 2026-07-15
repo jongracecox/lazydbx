@@ -116,6 +116,14 @@ func (b *Browser) Update(msg tea.Msg) (View, tea.Cmd) {
 		return b, nil
 	}
 
+	if done, ok := msg.(loginDoneMsg); ok {
+		if done.err != nil {
+			return b, func() tea.Msg { return FlashMsg{Level: FlashError, Text: "login failed: " + done.err.Error()} }
+		}
+		b.eng.RefreshNow(b.key)
+		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "logged in — refreshing…"} }
+	}
+
 	if b.filtering {
 		var event component.Event
 		var cmd tea.Cmd
@@ -155,6 +163,11 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "ctrl+r":
 		b.eng.RefreshNow(b.key)
 		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "refreshing…"} }
+	case "L":
+		if b.err != nil {
+			cmd := b.login()
+			return b, cmd
+		}
 	case "enter":
 		cmd := b.drillDown()
 		return b, cmd
@@ -199,16 +212,28 @@ func (b *Browser) describe() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	def, clients, th := b.def, b.clients, b.th
+	def, clients, scope, th := b.def, b.clients, b.scope, b.th
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		detail, err := def.Describe(ctx, clients, row)
+		detail, err := def.Describe(ctx, clients, scope, row)
 		if err != nil {
 			return FlashMsg{Level: FlashError, Text: fmt.Sprintf("describe: %v", err)}
 		}
 		return PushMsg{View: NewDescribe(th, def.Name()+"/"+row.ID, detail)}
 	}
+}
+
+// loginDoneMsg reports the result of a suspended `databricks auth login`.
+type loginDoneMsg struct{ err error }
+
+// login suspends the TUI and runs the CLI's browser-based OAuth flow.
+func (b *Browser) login() tea.Cmd {
+	cmd, err := dbx.LoginCommand(b.clients.Profile().Name)
+	if err != nil {
+		return func() tea.Msg { return FlashMsg{Level: FlashError, Text: err.Error()} }
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return loginDoneMsg{err: err} })
 }
 
 func (b *Browser) runAction(action resource.Action) tea.Cmd {
@@ -260,7 +285,7 @@ func (b *Browser) Render(width, height int) string {
 	switch {
 	case !b.loaded && b.err != nil:
 		return top + b.th.Error.Render(fmt.Sprintf("error loading %s: %v", b.def.Name(), b.err)) +
-			"\n\n" + b.th.Subtle.Render("press ctrl+r to retry, esc to go back")
+			"\n\n" + b.th.Subtle.Render("press L to log in, ctrl+r to retry, esc to go back")
 	case !b.loaded:
 		return top + b.th.Subtle.Render("loading "+b.def.Name()+"…")
 	}

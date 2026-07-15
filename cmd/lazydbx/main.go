@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 
 	"github.com/jongracecox/lazydbx/internal/app"
@@ -83,11 +85,12 @@ func run(cmd *cobra.Command, cfg config.Config) error {
 	// atomic pointer set immediately after construction. Pollers only start
 	// once views Init inside Run, so no event can precede the store.
 	var program atomic.Pointer[tea.Program]
+	store := engine.NewStore(filepath.Join(xdg.CacheHome, "lazydbx"))
 	eng := engine.New(func(ev engine.DataEvent) {
 		if p := program.Load(); p != nil {
 			p.Send(ev)
 		}
-	})
+	}, store)
 	defer eng.Stop()
 
 	m := app.New(cfg, profiles, resources.NewRegistry(), dbx.NewPool(), eng)

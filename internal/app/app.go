@@ -22,10 +22,9 @@ import (
 	"github.com/jongracecox/lazydbx/internal/version"
 )
 
-// Chrome geometry: header identity line + hint rows, status bar line, and
-// the command bar's two lines when open.
+// Chrome geometry: the status bar line and the command bar's two lines when
+// open. The header's height is dynamic (banner) — measured at render.
 const (
-	headerHeight = 4
 	statusHeight = 1
 	cmdBarHeight = 2
 )
@@ -290,9 +289,9 @@ func (m Model) View() tea.View {
 		hints = append(hints, top.Hints()...)
 	}
 	hints = append(hints, m.globalHints()...)
-	header := component.Header(m.th, m.width, context, badges, hints)
+	header := component.Header(m.th, m.width, m.height, context, badges, hints)
 
-	bodyHeight := m.height - headerHeight - statusHeight
+	bodyHeight := m.height - lipgloss.Height(header) - statusHeight
 	var cmdbar string
 	if m.cmdOpen {
 		bodyHeight -= cmdBarHeight

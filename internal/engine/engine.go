@@ -48,7 +48,8 @@ type FetchFunc func(ctx context.Context) ([]resource.Row, error)
 
 // Engine owns the cache and poll goroutines.
 type Engine struct {
-	sink func(DataEvent)
+	sink  func(DataEvent)
+	store *Store // optional disk cache; nil disables persistence
 	// now and after are injection points for tests.
 	now   func() time.Time
 	after func(d time.Duration) <-chan time.Time
@@ -73,10 +74,12 @@ type entry struct {
 }
 
 // New builds an engine delivering events to sink. The sink must be safe to
-// call from any goroutine (tea.Program.Send is).
-func New(sink func(DataEvent)) *Engine {
+// call from any goroutine (tea.Program.Send is). A nil store disables the
+// disk cache.
+func New(sink func(DataEvent), store *Store) *Engine {
 	return &Engine{
 		sink:    sink,
+		store:   store,
 		now:     time.Now,
 		after:   time.After,
 		entries: map[Key]*entry{},
@@ -96,6 +99,13 @@ func (e *Engine) Watch(key Key, fetch FetchFunc, interval time.Duration) {
 	}
 	ent.refs++
 	starting := ent.refs == 1 && ent.cancel == nil
+	// Memory miss → try the disk cache from a previous session, so first
+	// paint is instant even across restarts.
+	if !ent.hasData && e.store != nil {
+		if rows, fetchedAt, ok := e.store.Load(key); ok {
+			ent.rows, ent.fetchedAt, ent.hasData = rows, fetchedAt, true
+		}
+	}
 	var cached *DataEvent
 	if ent.hasData {
 		cached = &DataEvent{Key: key, Rows: ent.rows, Err: ent.err, FetchedAt: ent.fetchedAt, Stale: true}
@@ -204,6 +214,9 @@ func (e *Engine) fetchOnce(ctx context.Context, key Key, ent *entry, failures *i
 	ev := DataEvent{Key: key, Rows: ent.rows, Err: ent.err, FetchedAt: ent.fetchedAt, Stale: err != nil}
 	e.mu.Unlock()
 
+	if err == nil && e.store != nil {
+		e.store.Save(key, rows, ev.FetchedAt)
+	}
 	e.sink(ev)
 }
 

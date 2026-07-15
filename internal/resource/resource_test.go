@@ -31,7 +31,7 @@ func (d stubDef) List(context.Context, *dbx.Clients, Scope) ([]Row, error) {
 	return nil, nil
 }
 
-func (d stubDef) Describe(context.Context, *dbx.Clients, Row) (any, error) {
+func (d stubDef) Describe(context.Context, *dbx.Clients, Scope, Row) (any, error) {
 	return nil, nil
 }
 

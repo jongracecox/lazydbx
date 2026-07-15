@@ -7,5 +7,8 @@ import "github.com/jongracecox/lazydbx/internal/resource"
 func NewRegistry() *resource.Registry {
 	reg := resource.NewRegistry()
 	reg.MustRegister(CatalogsDef{})
+	reg.MustRegister(SchemasDef{})
+	reg.MustRegister(TablesDef{})
+	reg.MustRegister(ColumnsDef{})
 	return reg
 }

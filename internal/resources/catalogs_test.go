@@ -47,7 +47,7 @@ func TestCatalogsDefList(t *testing.T) {
 	assert.Empty(t, rows[1].Cells[3], "zero time renders empty")
 
 	// Row.Data keeps the domain object for describe.
-	got, err := CatalogsDef{}.Describe(context.Background(), c, rows[0])
+	got, err := CatalogsDef{}.Describe(context.Background(), c, resource.Scope{}, rows[0])
 	require.NoError(t, err)
 	assert.Equal(t, "main", got.(dbx.Catalog).Name)
 }
@@ -68,7 +68,7 @@ func TestCatalogsDefShape(t *testing.T) {
 	assert.Equal(t, "catalogs", d.Name())
 	assert.Contains(t, d.Aliases(), "cat")
 	assert.Empty(t, d.Args(), "catalogs is unscoped")
-	assert.Empty(t, d.Child(), "leaf until schemas lands in Phase 2")
+	assert.Equal(t, "schemas", d.Child())
 	assert.Equal(t, resource.Scope{"catalog": "main"},
 		d.ChildScope(resource.Scope{}, resource.Row{ID: "main"}))
 	assert.Len(t, d.Columns(), 5)

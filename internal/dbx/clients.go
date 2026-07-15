@@ -32,6 +32,8 @@ type Clients struct {
 // defs run without any SDK or network involvement.
 type DAOs struct {
 	Catalogs CatalogsDAO
+	Schemas  SchemasDAO
+	Tables   TablesDAO
 }
 
 // NewClients wraps a profile; no network I/O happens until first use.
@@ -74,6 +76,30 @@ func (c *Clients) Catalogs() (CatalogsDAO, error) {
 		return nil, err
 	}
 	return catalogsDAO{w: w}, nil
+}
+
+// Schemas returns the schemas DAO.
+func (c *Clients) Schemas() (SchemasDAO, error) {
+	if c.daos.Schemas != nil {
+		return c.daos.Schemas, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return schemasDAO{w: w}, nil
+}
+
+// Tables returns the tables DAO.
+func (c *Clients) Tables() (TablesDAO, error) {
+	if c.daos.Tables != nil {
+		return c.daos.Tables, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return tablesDAO{w: w}, nil
 }
 
 // Pool caches one Clients per profile name.
