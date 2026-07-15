@@ -19,7 +19,6 @@ import (
 	"github.com/jongracecox/lazydbx/internal/theme"
 	"github.com/jongracecox/lazydbx/internal/ui/component"
 	"github.com/jongracecox/lazydbx/internal/ui/view"
-	"github.com/jongracecox/lazydbx/internal/version"
 )
 
 // Chrome geometry: the status bar line and the command bar's two lines when
@@ -272,13 +271,19 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	context := version.Version
+	context := "select a profile"
 	badges := []string{}
 	if m.clients != nil {
 		p := m.clients.Profile()
 		context = p.Name + " " + m.th.Subtle.Render("("+p.ShortHost()+")")
 		if p.IsAccount() {
 			badges = append(badges, "ACCOUNT")
+		}
+	}
+	// Show the drill-down path (catalog ▸ schema ▸ table) beside the profile.
+	if s, ok := m.top().(view.Scoped); ok {
+		if path := s.ScopePath(); path != "" {
+			context += "   " + m.th.KeyHint.Render(path)
 		}
 	}
 	if m.cfg.ReadOnly {

@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/jongracecox/lazydbx/internal/theme"
+	"github.com/jongracecox/lazydbx/internal/version"
 )
 
 // hintRows is how many rows the key-hint block may occupy.
@@ -34,13 +35,20 @@ const (
 func Header(th theme.Theme, width, height int, context string, badges []string, hints []key.Binding) string {
 	contentWidth := width
 	var bannerBlock string
-	if width >= bannerMinWidth && height >= bannerMinHeight {
-		bannerBlock = th.Logo.Render(banner)
+	showBanner := width >= bannerMinWidth && height >= bannerMinHeight
+	if showBanner {
+		bannerBlock = renderBanner(th)
 		contentWidth = width - lipgloss.Width(banner) - 2
 	}
 
 	var b strings.Builder
-	line := th.Logo.Render(" lazydbx ") + " " + th.Title.Render(context)
+	var line string
+	if !showBanner {
+		// The banner carries the app identity; without it, fall back to
+		// the compact name chip.
+		line = th.Logo.Render(" lazydbx ") + " "
+	}
+	line += th.Title.Render(context)
 	for _, badge := range badges {
 		line += "  " + th.Warning.Render("["+badge+"]")
 	}
@@ -53,6 +61,26 @@ func Header(th theme.Theme, width, height int, context string, badges []string, 
 	}
 	left := lipgloss.NewStyle().Width(contentWidth + 2).Render(b.String())
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, bannerBlock)
+}
+
+// renderBanner styles the logo and tucks the app name + version into its
+// bottom-right corner.
+func renderBanner(th theme.Theme) string {
+	lines := strings.Split(banner, "\n")
+	bannerWidth := lipgloss.Width(banner)
+	tag := "lazydbx " + version.Version
+
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = th.Logo.Render(l)
+	}
+	last := lines[len(lines)-1]
+	if pad := bannerWidth - lipgloss.Width(last) - lipgloss.Width(tag); pad >= 1 {
+		out[len(out)-1] = th.Logo.Render(last) + strings.Repeat(" ", pad) + th.Subtle.Render(tag)
+	} else {
+		out = append(out, lipgloss.PlaceHorizontal(bannerWidth, lipgloss.Right, th.Subtle.Render(tag)))
+	}
+	return strings.Join(out, "\n")
 }
 
 // renderHints lays bindings out in columns, k9s-style: fill down each

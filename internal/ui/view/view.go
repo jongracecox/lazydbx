@@ -9,6 +9,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// Scoped views expose their drill-down path for header display.
+type Scoped interface {
+	ScopePath() string
+}
+
 // View is one screen in the navigation stack.
 type View interface {
 	// Init returns the view's startup command (e.g. subscribe to the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -82,12 +83,29 @@ func (b *Browser) Init() tea.Cmd {
 // Close unsubscribes; the engine keeps the cache warm for re-entry.
 func (b *Browser) Close() { b.eng.Unwatch(b.key) }
 
-// Title is the breadcrumb segment, e.g. "tables(main.silver)".
+// Title is the breadcrumb segment: the item selected to reach this view
+// (e.g. drilling into catalog qsic_internal gives "qsic_internal"), or the
+// resource name at the root. Full context lives in the header's scope path.
 func (b *Browser) Title() string {
-	if h := b.scope.Hash(); h != "" {
-		return b.def.Name() + "(" + h + ")"
+	args := b.def.Args()
+	if len(args) > 0 {
+		if v := b.scope[args[len(args)-1]]; v != "" {
+			return v
+		}
 	}
 	return b.def.Name()
+}
+
+// ScopePath renders the drill-down hierarchy for the header, e.g.
+// "dev_v2 ▸ 00_raw_accounts ▸ accounts".
+func (b *Browser) ScopePath() string {
+	var parts []string
+	for _, arg := range b.def.Args() {
+		if v := b.scope[arg]; v != "" {
+			parts = append(parts, v)
+		}
+	}
+	return strings.Join(parts, " ▸ ")
 }
 
 // Hints lists browser keys for the header. In sort mode the hints switch to
