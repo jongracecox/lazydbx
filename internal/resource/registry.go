@@ -62,6 +62,35 @@ func (r *Registry) Names() []string {
 	return names
 }
 
+// Canonical returns only the canonical resource names, sorted — shown when
+// the command bar opens empty, so every resource is discoverable.
+func (r *Registry) Canonical() []string {
+	names := make([]string, 0, len(r.defs))
+	for name := range r.defs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Summaries renders one line per resource — "name (alias1, alias2) [args]" —
+// for the help view.
+func (r *Registry) Summaries() []string {
+	out := make([]string, 0, len(r.defs))
+	for _, name := range r.Canonical() {
+		def := r.defs[name]
+		line := name
+		if aliases := def.Aliases(); len(aliases) > 0 {
+			line += " (" + strings.Join(aliases, ", ") + ")"
+		}
+		if args := def.Args(); len(args) > 0 {
+			line += "  <" + strings.Join(args, "> <") + ">"
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
 // Command is a parsed `:` command line.
 type Command struct {
 	Def    Def

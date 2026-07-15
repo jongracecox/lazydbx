@@ -44,11 +44,11 @@ func NewCmdBar(complete func(string) []string) CmdBar {
 	return CmdBar{input: ti, complete: complete}
 }
 
-// Open resets and focuses the bar.
+// Open resets and focuses the bar, listing all completions immediately.
 func (c CmdBar) Open() (CmdBar, tea.Cmd) {
 	c.input.SetValue("")
-	c.matches = nil
 	c.sel = 0
+	c.refreshMatches()
 	return c, c.input.Focus()
 }
 
@@ -85,11 +85,13 @@ func (c CmdBar) Update(msg tea.Msg) (CmdBar, Event, tea.Cmd) {
 
 func (c *CmdBar) refreshMatches() {
 	value := c.input.Value()
-	if value == "" || strings.Contains(value, " ") {
+	if strings.Contains(value, " ") {
 		c.matches = nil
 		c.sel = 0
 		return
 	}
+	// An empty prompt lists everything — that's how resources are
+	// discovered in the first place.
 	c.matches = c.complete(value)
 	if c.sel >= len(c.matches) {
 		c.sel = 0

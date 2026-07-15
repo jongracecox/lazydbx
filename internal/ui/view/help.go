@@ -15,10 +15,13 @@ type Help struct {
 	sections []HelpSection
 }
 
-// HelpSection groups bindings under a heading.
+// HelpSection groups bindings (or plain lines) under a heading.
 type HelpSection struct {
 	Title    string
 	Bindings []key.Binding
+	// Lines are rendered as plain indented text — used for the resource
+	// catalog, which isn't key-bound.
+	Lines []string
 }
 
 // NewHelp builds the help view.
@@ -65,6 +68,9 @@ func (h *Help) Render(width, _ int) string {
 			pad := strings.Repeat(" ", keyWidth-len(bind.Help().Key))
 			b.WriteString("  " + h.th.KeyHint.Render("<"+bind.Help().Key+">") + pad + "  " +
 				h.th.KeyLabel.Render(bind.Help().Desc) + "\n")
+		}
+		for _, line := range section.Lines {
+			b.WriteString("  " + h.th.KeyLabel.Render(line) + "\n")
 		}
 	}
 	out := b.String()

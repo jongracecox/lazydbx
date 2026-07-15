@@ -58,7 +58,7 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 		pool:     pool,
 		eng:      eng,
 		profiles: profiles,
-		cmdbar:   component.NewCmdBar(registry.Complete),
+		cmdbar:   component.NewCmdBar(completer(registry)),
 	}
 
 	if cfg.Profile != "" {
@@ -79,7 +79,7 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 func (m *Model) selectProfile(p dbx.Profile) {
 	m.clients = m.pool.Get(p)
 	m.th = theme.ForProfile(p.Name, m.cfg.Skins)
-	m.cmdbar = component.NewCmdBar(m.registry.Complete)
+	m.cmdbar = component.NewCmdBar(completer(m.registry))
 
 	for _, v := range m.stack {
 		v.Close()
@@ -87,6 +87,17 @@ func (m *Model) selectProfile(p dbx.Profile) {
 	m.stack = []view.View{view.NewPicker(m.th, m.profiles)}
 	if def, ok := m.registry.Get(defaultResource); ok {
 		m.stack = append(m.stack, m.newBrowser(def, resource.Scope{}, ""))
+	}
+}
+
+// completer feeds the command bar: an empty prompt lists every canonical
+// resource (discoverability); a prefix narrows across names and aliases.
+func completer(reg *resource.Registry) func(string) []string {
+	return func(prefix string) []string {
+		if prefix == "" {
+			return append(reg.Canonical(), "sql")
+		}
+		return reg.Complete(prefix)
 	}
 }
 
@@ -268,6 +279,10 @@ func (m Model) helpView() view.View {
 	if top := m.top(); top != nil && len(top.Hints()) > 0 {
 		sections = append(sections, view.HelpSection{Title: top.Title(), Bindings: top.Hints()})
 	}
+	sections = append(sections, view.HelpSection{
+		Title: "Resources — open with :name [args]",
+		Lines: append(m.registry.Summaries(), "sql  (ad-hoc SQL editor)"),
+	})
 	return view.NewHelp(m.th, sections)
 }
 
