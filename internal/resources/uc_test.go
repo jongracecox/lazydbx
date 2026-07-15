@@ -9,6 +9,7 @@ import (
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/resource"
+	"github.com/jongracecox/lazydbx/internal/ui/view"
 )
 
 type fakeSchemasDAO struct {
@@ -89,6 +90,28 @@ func TestTablesDefListAndDescribe(t *testing.T) {
 	assert.Equal(t,
 		resource.Scope{"catalog": "main", "schema": "silver", "table": "events"},
 		TablesDef{}.ChildScope(scope, rows[0]))
+}
+
+func TestTablesDefPreviewAction(t *testing.T) {
+	scope := resource.Scope{"catalog": "main", "schema": "silver"}
+	actions := TablesDef{}.Actions()
+	require.Len(t, actions, 2)
+
+	preview := actions[0]
+	assert.Equal(t, "p", preview.Key)
+	assert.True(t, preview.NeedsRow)
+	assert.False(t, preview.Dangerous)
+
+	msg := preview.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
+	open, ok := msg.(view.OpenSQLMsg)
+	require.True(t, ok)
+	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Query)
+	assert.True(t, open.Execute, "preview auto-executes")
+
+	query := actions[1]
+	assert.Equal(t, "x", query.Key)
+	msg = query.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
+	assert.False(t, msg.(view.OpenSQLMsg).Execute, "query opens the editor without executing")
 }
 
 func TestColumnsDefList(t *testing.T) {

@@ -38,7 +38,7 @@ internal/engine    → poll/cache: per-key goroutines, stale-while-revalidate, o
 internal/{config,theme,logging,version} → leaves
 ```
 
-Dependency direction: `cmd → app → ui/view → resource ← resources → dbx`, engine between view and resources.
+Dependency direction: `cmd → app → ui/view → resource ← resources → dbx`, engine between view and resources. One sanctioned extra edge: `resources → ui/view` for actions that return view messages (e.g. tables' preview action returns `view.OpenSQLMsg`); `ui/view` must never import `resources`.
 
 ## Iron rules
 

@@ -143,6 +143,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusbar.Flash(msg.Level, msg.Text, time.Now())
 		return m, nil
 
+	case view.OpenSQLMsg:
+		return m.push(view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, msg.Execute))
+
 	case view.ProfileSelectedMsg:
 		m.selectProfile(msg.Profile)
 		m.statusbar.Flash(component.FlashInfo, "profile: "+msg.Profile.Name, time.Now())
@@ -173,6 +176,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case component.EventChanged, component.EventNone:
 		}
 		return m, cmd
+	}
+
+	// Views that capture text input (e.g. the SQL editor) get first refusal on
+	// keys so typed characters like ':' or 'q' aren't stolen by the global
+	// shortcuts below. ctrl+c still quits unconditionally.
+	if msg.String() != "ctrl+c" {
+		if v, ok := m.top().(interface{ CapturesKeys() bool }); ok && v.CapturesKeys() {
+			return m.forward(msg)
+		}
 	}
 
 	switch msg.String() {
@@ -233,6 +245,10 @@ func (m Model) exec(input string) (tea.Model, tea.Cmd) {
 	}
 	if input == "q" || input == "quit" {
 		return m, tea.Quit
+	}
+	if input == "sql" || strings.HasPrefix(input, "sql ") {
+		query := strings.TrimSpace(strings.TrimPrefix(input, "sql"))
+		return m.push(view.NewSQLView(m.th, m.clients, m.cfg.SQL, query, false))
 	}
 	cmd, err := m.registry.Parse(input)
 	if err != nil {

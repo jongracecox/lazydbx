@@ -39,3 +39,12 @@ type FlashMsg struct {
 
 // ProfileSelectedMsg is emitted by the profile picker.
 type ProfileSelectedMsg struct{ Profile dbx.Profile }
+
+// OpenSQLMsg asks the app to open the SQL editor/preview view pre-filled with
+// Query. When Execute is true the statement runs immediately on the view's
+// Init — this is how table preview launches a ready-to-run query without the
+// user pressing execute.
+type OpenSQLMsg struct {
+	Query   string
+	Execute bool
+}

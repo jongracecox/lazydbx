@@ -2,11 +2,16 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/resource"
+	"github.com/jongracecox/lazydbx/internal/ui/view"
 )
+
+// previewLimit caps table preview queries.
+const previewLimit = 200
 
 var tableCols = []resource.ColSpec[dbx.Table]{
 	{Column: resource.Column{Title: "NAME"}, Extract: func(t dbx.Table) string { return t.Name }},
@@ -30,7 +35,32 @@ func (TablesDef) ChildScope(parent resource.Scope, row resource.Row) resource.Sc
 	return parent.Merge("table", row.ID)
 }
 
-func (TablesDef) Actions() []resource.Action { return nil }
+func (TablesDef) Actions() []resource.Action {
+	return []resource.Action{
+		{
+			Key:      "p",
+			Name:     "preview",
+			NeedsRow: true,
+			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {
+				return view.OpenSQLMsg{Query: previewQuery(scope, row.ID), Execute: true}
+			},
+		},
+		{
+			Key:      "x",
+			Name:     "query",
+			NeedsRow: true,
+			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {
+				return view.OpenSQLMsg{Query: previewQuery(scope, row.ID), Execute: false}
+			},
+		},
+	}
+}
+
+// previewQuery builds the SELECT for a table, backtick-quoting identifiers.
+func previewQuery(scope resource.Scope, table string) string {
+	return fmt.Sprintf("SELECT * FROM `%s`.`%s`.`%s` LIMIT %d",
+		scope["catalog"], scope["schema"], table, previewLimit)
+}
 
 func (TablesDef) List(ctx context.Context, c *dbx.Clients, scope resource.Scope) ([]resource.Row, error) {
 	dao, err := c.Tables()
