@@ -3,6 +3,8 @@ package dbx
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +19,10 @@ import (
 type jobsDAO struct {
 	w *databricks.WorkspaceClient
 }
+
+// lastRunSweep bounds the all-jobs recent-runs fetch used to enrich the
+// jobs list with last-run info (the jobs list API has none).
+const lastRunSweep = 200
 
 func (d jobsDAO) List(ctx context.Context) ([]Job, error) {
 	bases, err := listing.ToSlice(ctx, d.w.Jobs.List(ctx, jobs.ListJobsRequest{}))
@@ -38,8 +44,52 @@ func (d jobsDAO) List(ctx context.Context) ([]Job, error) {
 			CreatedAt: millisToTime(bj.CreatedTime),
 		})
 	}
-	sortByName(out, func(j Job) string { return j.Name })
+
+	// Enrich with last-run info from one bounded sweep of recent runs across
+	// all jobs (a ListRunsRequest without JobId). Best-effort: on error the
+	// list still renders, just without run info.
+	recent, err := listing.ToSliceN(ctx, d.w.Jobs.ListRuns(ctx, jobs.ListRunsRequest{}), lastRunSweep)
+	if err != nil {
+		slog.Warn("last-run sweep failed; jobs render without run info", "err", err)
+	} else {
+		applyLastRuns(out, recent)
+	}
+
+	sortJobsByRecency(out)
 	return out, nil
+}
+
+// applyLastRuns stamps each job with its most recent run from the sweep.
+// Runs arrive newest-first, so the first run seen per job wins.
+func applyLastRuns(out []Job, recent []jobs.BaseRun) {
+	latest := make(map[int64]*jobs.BaseRun, len(recent))
+	for i := range recent {
+		if _, seen := latest[recent[i].JobId]; !seen {
+			latest[recent[i].JobId] = &recent[i]
+		}
+	}
+	for i := range out {
+		br, ok := latest[out[i].ID]
+		if !ok {
+			continue
+		}
+		state, result := mapRunState(br.State, br.Status)
+		out[i].LastRunAt = millisToTime(br.StartTime)
+		out[i].LastRunState = state
+		out[i].LastRunResult = result
+	}
+}
+
+// sortJobsByRecency orders most recent last-run first; never-ran (or
+// outside the sweep window) jobs sort last, alphabetically.
+func sortJobsByRecency(out []Job) {
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].LastRunAt, out[j].LastRunAt
+		if a.Equal(b) {
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		}
+		return a.After(b)
+	})
 }
 
 func (d jobsDAO) ListRuns(ctx context.Context, jobID int64, limit int) ([]Run, error) {

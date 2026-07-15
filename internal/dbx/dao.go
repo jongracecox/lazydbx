@@ -128,13 +128,19 @@ type StatementDAO interface {
 	Cancel(ctx context.Context, statementID string) error
 }
 
-// Job is a Databricks job, reduced to list-view needs.
+// Job is a Databricks job, reduced to list-view needs. LastRun* fields are
+// best-effort, enriched from a bounded sweep of recent runs across all jobs
+// (the jobs list API itself exposes nothing about runs); jobs whose last run
+// predates the sweep window have zero values.
 type Job struct {
-	ID        int64     `yaml:"id" json:"id"`
-	Name      string    `yaml:"name" json:"name"`
-	Schedule  string    `yaml:"schedule,omitempty" json:"schedule,omitempty"` // cron / trigger summary, "(paused)" suffix when paused
-	Creator   string    `yaml:"creator,omitempty" json:"creator,omitempty"`
-	CreatedAt time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+	ID            int64     `yaml:"id" json:"id"`
+	Name          string    `yaml:"name" json:"name"`
+	Schedule      string    `yaml:"schedule,omitempty" json:"schedule,omitempty"` // cron / trigger summary, "(paused)" suffix when paused
+	Creator       string    `yaml:"creator,omitempty" json:"creator,omitempty"`
+	CreatedAt     time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+	LastRunAt     time.Time `yaml:"last_run_at,omitempty" json:"last_run_at,omitempty"`
+	LastRunState  string    `yaml:"last_run_state,omitempty" json:"last_run_state,omitempty"`
+	LastRunResult string    `yaml:"last_run_result,omitempty" json:"last_run_result,omitempty"`
 }
 
 // Run is one job run.

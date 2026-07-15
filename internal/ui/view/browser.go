@@ -319,6 +319,12 @@ func (b *Browser) runAction(action resource.Action) tea.Cmd {
 }
 
 func (b *Browser) applyData(ev engine.DataEvent) {
+	// Disk-cached rows written by an older binary can have a different
+	// column count than the current def; rendering them would misalign
+	// every cell. Skip them and wait for the fresh fetch.
+	if ev.Stale && len(ev.Rows) > 0 && len(ev.Rows[0].Cells) != len(b.def.Columns()) {
+		return
+	}
 	b.allRows = ev.Rows
 	b.fetchedAt = ev.FetchedAt
 	b.err = ev.Err

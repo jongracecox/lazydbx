@@ -264,3 +264,36 @@ func TestRenderEvents(t *testing.T) {
 		assert.Equal(t, want, renderEvents(events))
 	})
 }
+
+func TestApplyLastRunsAndRecencySort(t *testing.T) {
+	out := []Job{
+		{ID: 1, Name: "beta"},
+		{ID: 2, Name: "alpha"},
+		{ID: 3, Name: "zeta"},
+	}
+	// Sweep is newest-first; job 1 appears twice — first (newest) wins.
+	recent := []jobs.BaseRun{
+		{JobId: 2, StartTime: 2000, State: &jobs.RunState{LifeCycleState: "RUNNING"}},
+		{JobId: 1, StartTime: 1500, State: &jobs.RunState{LifeCycleState: "TERMINATED", ResultState: "SUCCESS"}},
+		{JobId: 1, StartTime: 1000, State: &jobs.RunState{LifeCycleState: "TERMINATED", ResultState: "FAILED"}},
+	}
+
+	applyLastRuns(out, recent)
+	sortJobsByRecency(out)
+
+	assert.Equal(t, int64(2), out[0].ID, "most recent run first")
+	assert.Equal(t, "RUNNING", out[0].LastRunState)
+	assert.Equal(t, int64(1), out[1].ID)
+	assert.Equal(t, "SUCCESS", out[1].LastRunResult, "newest run wins over older")
+	assert.Equal(t, int64(3), out[2].ID, "never-ran sorts last")
+	assert.True(t, out[2].LastRunAt.IsZero())
+}
+
+func TestSortJobsByRecencyTiebreaksOnName(t *testing.T) {
+	out := []Job{
+		{ID: 1, Name: "Zeta"},
+		{ID: 2, Name: "alpha"},
+	}
+	sortJobsByRecency(out)
+	assert.Equal(t, "alpha", out[0].Name, "equal (zero) times fall back to name order")
+}

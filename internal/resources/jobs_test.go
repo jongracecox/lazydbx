@@ -65,21 +65,36 @@ func clientsWithPipelines(dao dbx.PipelinesDAO) *dbx.Clients {
 
 func TestJobsDefList(t *testing.T) {
 	created := time.Now().Add(-2 * time.Hour)
+	lastRun := time.Now().Add(-30 * time.Minute)
 	c := clientsWithJobs(fakeJobsDAO{
 		ListFn: func(context.Context) ([]dbx.Job, error) {
 			return []dbx.Job{
-				{ID: 123, Name: "etl", Schedule: "0 0 * * *", Creator: "jon@example.com", CreatedAt: created},
-				{ID: 456, Name: "reports"},
+				{
+					ID: 123, Name: "etl", Schedule: "0 0 * * *", Creator: "jon@example.com", CreatedAt: created,
+					LastRunAt: lastRun, LastRunState: "TERMINATED", LastRunResult: "SUCCESS",
+				},
+				{ID: 456, Name: "reports", LastRunAt: lastRun, LastRunState: "RUNNING"},
+				{ID: 789, Name: "never-ran"},
 			}, nil
 		},
 	})
 
 	rows, err := JobsDef{}.List(context.Background(), c, resource.Scope{})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 3)
 	assert.Equal(t, "123", rows[0].ID)
-	assert.Equal(t, []string{"123", "etl", "0 0 * * *", "jon@example.com", "2h"}, rows[0].Cells)
-	assert.Equal(t, "456", rows[1].ID)
+	assert.Equal(t, []string{"123", "etl", "30m", "SUCCESS", "0 0 * * *", "jon@example.com", "2h"}, rows[0].Cells)
+	assert.Equal(t, "RUNNING", rows[1].Cells[3], "in-flight run shows lifecycle state")
+	assert.Empty(t, rows[2].Cells[2], "never-ran job has empty LAST RUN")
+	assert.Empty(t, rows[2].Cells[3])
+}
+
+func TestJobsDefStatusColoring(t *testing.T) {
+	d := JobsDef{}
+	assert.Equal(t, resource.CellGood, d.CellClass(jobStatusCol, "SUCCESS"))
+	assert.Equal(t, resource.CellBad, d.CellClass(jobStatusCol, "FAILED"))
+	assert.Equal(t, resource.CellRunning, d.CellClass(jobStatusCol, "RUNNING"))
+	assert.Equal(t, resource.CellDefault, d.CellClass(0, "FAILED"), "only the STATUS column is colored")
 }
 
 func TestJobsDefShape(t *testing.T) {

@@ -13,9 +13,23 @@ import (
 var jobCols = []resource.ColSpec[dbx.Job]{
 	{Column: resource.Column{Title: "ID", Width: 14}, Extract: func(j dbx.Job) string { return strconv.FormatInt(j.ID, 10) }},
 	{Column: resource.Column{Title: "NAME"}, Extract: func(j dbx.Job) string { return j.Name }},
-	{Column: resource.Column{Title: "SCHEDULE", Width: 24}, Extract: func(j dbx.Job) string { return j.Schedule }},
+	{Column: resource.Column{Title: "LAST RUN", Width: 10}, Extract: func(j dbx.Job) string { return relTime(j.LastRunAt) }},
+	{Column: resource.Column{Title: "STATUS", Width: 14}, Extract: lastStatus},
+	{Column: resource.Column{Title: "SCHEDULE", Width: 22}, Extract: func(j dbx.Job) string { return j.Schedule }},
 	{Column: resource.Column{Title: "CREATOR", Width: 28, Wide: true}, Extract: func(j dbx.Job) string { return j.Creator }},
-	{Column: resource.Column{Title: "CREATED", Width: 12}, Extract: func(j dbx.Job) string { return relTime(j.CreatedAt) }},
+	{Column: resource.Column{Title: "CREATED", Width: 12, Wide: true}, Extract: func(j dbx.Job) string { return relTime(j.CreatedAt) }},
+}
+
+// jobStatusCol is the index of the STATUS column, colored via stateClass.
+const jobStatusCol = 3
+
+// lastStatus prefers the terminal result (SUCCESS/FAILED); an in-flight run
+// shows its lifecycle state instead.
+func lastStatus(j dbx.Job) string {
+	if j.LastRunResult != "" {
+		return j.LastRunResult
+	}
+	return j.LastRunState
 }
 
 // JobsDef browses Databricks jobs.
@@ -36,6 +50,15 @@ func (JobsDef) ChildScope(parent resource.Scope, row resource.Row) resource.Scop
 }
 
 func (JobsDef) Actions() []resource.Action { return nil }
+
+// CellClass implements resource.Styler: the STATUS column carries the last
+// run's verdict color.
+func (JobsDef) CellClass(col int, value string) resource.CellClass {
+	if col == jobStatusCol {
+		return stateClass(value)
+	}
+	return resource.CellDefault
+}
 
 func (JobsDef) List(ctx context.Context, c *dbx.Clients, _ resource.Scope) ([]resource.Row, error) {
 	dao, err := c.Jobs()

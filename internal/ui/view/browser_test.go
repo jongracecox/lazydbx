@@ -21,12 +21,13 @@ import (
 type crumbDef struct {
 	name string
 	args []string
+	cols []resource.Column
 }
 
 func (d crumbDef) Name() string                                               { return d.name }
 func (d crumbDef) Aliases() []string                                          { return nil }
 func (d crumbDef) Args() []string                                             { return d.args }
-func (d crumbDef) Columns() []resource.Column                                 { return nil }
+func (d crumbDef) Columns() []resource.Column                                 { return d.cols }
 func (d crumbDef) PollInterval() time.Duration                                { return time.Hour }
 func (d crumbDef) Child() string                                              { return "" }
 func (d crumbDef) ChildScope(p resource.Scope, _ resource.Row) resource.Scope { return p }
@@ -82,6 +83,21 @@ func TestBrowserFavorites(t *testing.T) {
 	_, cmd = b.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	assert.Contains(t, cmd().(FlashMsg).Text, "unfavorited beta")
 	assert.False(t, favs.IsFavorite("test", "jobs|", "beta"))
+}
+
+func TestBrowserSkipsStaleRowsWithWrongArity(t *testing.T) {
+	// def with 2 columns; cached rows carry 1 cell (older schema).
+	def := crumbDef{name: "jobs", cols: []resource.Column{{Title: "A"}, {Title: "B"}}}
+	b := newTestBrowser(def, resource.Scope{})
+	b.Render(100, 20)
+
+	b.applyData(engine.DataEvent{Key: b.key, Stale: true, Rows: []resource.Row{{ID: "old", Cells: []string{"only-one"}}}})
+	assert.False(t, b.loaded, "mismatched stale cache is not rendered")
+
+	b.applyData(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "new", Cells: []string{"a", "b"}}}})
+	assert.True(t, b.loaded, "fresh data with the right arity renders")
+	assert.Len(t, b.allRows, 1)
+	assert.Equal(t, "new", b.allRows[0].ID)
 }
 
 func TestBrowserTitleAndScopePath(t *testing.T) {
