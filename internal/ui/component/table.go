@@ -23,6 +23,7 @@ const wideCutoff = 110
 // the sorted column again reverses direction — applied live), enter
 // confirms, esc reverts.
 type Table struct {
+	th       theme.Theme
 	tbl      btable.Model
 	baseRows []resource.Row // as supplied (post-filter), original order
 	rows     []resource.Row // baseRows through the active sort
@@ -30,6 +31,11 @@ type Table struct {
 	visIdx   []int // visible column -> t.cols index
 	width    int
 	height   int
+
+	// cellStyler, when set, classifies each cell by its original column index
+	// and raw value; the class maps to a theme style applied at render time
+	// only (raw Row.Cells stay unstyled so filter/sort operate on plain text).
+	cellStyler func(col int, value string) resource.CellClass
 
 	sortCol int // index into t.cols; -1 = no sort
 	sortAsc bool
@@ -47,7 +53,34 @@ func NewTable(th theme.Theme) Table {
 	styles.Selected = lipgloss.NewStyle().Reverse(true).Bold(true)
 
 	tbl := btable.New(btable.WithFocused(true), btable.WithStyles(styles))
-	return Table{tbl: tbl, sortCol: -1}
+	return Table{th: th, tbl: tbl, sortCol: -1}
+}
+
+// SetCellStyler installs a semantic classifier for cell values; nil disables
+// styling. fn receives the ORIGINAL column index (into Columns()) and the raw
+// value, and returns a CellClass mapped to a theme style at render time. The
+// underlying Row.Cells are never mutated.
+func (t *Table) SetCellStyler(fn func(col int, value string) resource.CellClass) {
+	t.cellStyler = fn
+	t.reflow()
+}
+
+// classStyle maps a CellClass to its theme style. The bool is false for
+// CellDefault (and any unknown class), meaning "render the value unstyled".
+func (t *Table) classStyle(c resource.CellClass) (lipgloss.Style, bool) {
+	switch c {
+	case resource.CellGood:
+		return t.th.Success, true
+	case resource.CellBad:
+		return t.th.Error, true
+	case resource.CellWarn:
+		return t.th.Warning, true
+	case resource.CellRunning:
+		return t.th.KeyHint, true
+	case resource.CellDefault:
+		return lipgloss.Style{}, false
+	}
+	return lipgloss.Style{}, false
 }
 
 // SetSize resizes the table region. Reflow only happens on actual size
@@ -155,9 +188,17 @@ func (t *Table) reflow() {
 	for i, r := range t.rows {
 		cells := make([]string, len(t.visIdx))
 		for j, src := range t.visIdx {
+			var val string
 			if src < len(r.Cells) {
-				cells[j] = r.Cells[src]
+				val = r.Cells[src]
 			}
+			// Style at render time only; src is the original column index.
+			if t.cellStyler != nil {
+				if st, ok := t.classStyle(t.cellStyler(src, val)); ok {
+					val = st.Render(val)
+				}
+			}
+			cells[j] = val
 		}
 		brows[i] = cells
 	}

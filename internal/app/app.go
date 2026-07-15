@@ -146,6 +146,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.OpenSQLMsg:
 		return m.push(view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, msg.Execute))
 
+	case view.OpenLogMsg:
+		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
+
 	case view.ProfileSelectedMsg:
 		m.selectProfile(msg.Profile)
 		m.statusbar.Flash(component.FlashInfo, "profile: "+msg.Profile.Name, time.Now())

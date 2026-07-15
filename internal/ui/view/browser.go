@@ -48,6 +48,12 @@ type Browser struct {
 
 // NewBrowser builds a browser for one def+scope.
 func NewBrowser(def resource.Def, scope resource.Scope, clients *dbx.Clients, eng *engine.Engine, th theme.Theme, initialFilter string) *Browser {
+	table := component.NewTable(th)
+	// Defs that classify their cells (run states, health) drive semantic
+	// coloring; the table maps classes to theme styles at render time.
+	if styler, ok := def.(resource.Styler); ok {
+		table.SetCellStyler(styler.CellClass)
+	}
 	return &Browser{
 		def:     def,
 		scope:   scope,
@@ -59,7 +65,7 @@ func NewBrowser(def resource.Def, scope resource.Scope, clients *dbx.Clients, en
 			Resource: def.Name(),
 			Scope:    scope.Hash(),
 		},
-		table:     component.NewTable(th),
+		table:     table,
 		filter:    component.NewFilterBar(),
 		filterVal: initialFilter,
 	}

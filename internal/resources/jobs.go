@@ -1,0 +1,77 @@
+package resources
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/jongracecox/lazydbx/internal/dbx"
+	"github.com/jongracecox/lazydbx/internal/resource"
+)
+
+var jobCols = []resource.ColSpec[dbx.Job]{
+	{Column: resource.Column{Title: "ID", Width: 14}, Extract: func(j dbx.Job) string { return strconv.FormatInt(j.ID, 10) }},
+	{Column: resource.Column{Title: "NAME"}, Extract: func(j dbx.Job) string { return j.Name }},
+	{Column: resource.Column{Title: "SCHEDULE", Width: 24}, Extract: func(j dbx.Job) string { return j.Schedule }},
+	{Column: resource.Column{Title: "CREATOR", Width: 28, Wide: true}, Extract: func(j dbx.Job) string { return j.Creator }},
+	{Column: resource.Column{Title: "CREATED", Width: 12}, Extract: func(j dbx.Job) string { return relTime(j.CreatedAt) }},
+}
+
+// JobsDef browses Databricks jobs.
+type JobsDef struct{}
+
+func (JobsDef) Name() string               { return "jobs" }
+func (JobsDef) Aliases() []string          { return []string{"job", "j"} }
+func (JobsDef) Args() []string             { return nil }
+func (JobsDef) Columns() []resource.Column { return resource.Cols(jobCols) }
+
+// PollInterval is 30s — the jobs list API is rate-limited to 20/s.
+func (JobsDef) PollInterval() time.Duration { return 30 * time.Second }
+
+func (JobsDef) Child() string { return "runs" }
+
+func (JobsDef) ChildScope(parent resource.Scope, row resource.Row) resource.Scope {
+	return parent.Merge("job", row.ID)
+}
+
+func (JobsDef) Actions() []resource.Action { return nil }
+
+func (JobsDef) List(ctx context.Context, c *dbx.Clients, _ resource.Scope) ([]resource.Row, error) {
+	dao, err := c.Jobs()
+	if err != nil {
+		return nil, err
+	}
+	items, err := dao.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resource.BuildRows(items, func(j dbx.Job) string { return strconv.FormatInt(j.ID, 10) }, jobCols), nil
+}
+
+func (JobsDef) Describe(_ context.Context, _ *dbx.Clients, _ resource.Scope, row resource.Row) (any, error) {
+	return row.Data, nil
+}
+
+// stateClass maps a lifecycle/result/health value to a semantic CellClass,
+// shared by runs, taskruns, pipelines, and updates. Case-insensitive.
+//
+// TERMINATED (job/run lifecycle state) is intentionally CellDefault, not
+// CellWarn: it's a neutral terminal state whose Result column (SUCCESS,
+// FAILED, CANCELED, ...) already carries the verdict — coloring the state
+// column too would be redundant and could clash with the result color.
+func stateClass(value string) resource.CellClass {
+	switch strings.ToUpper(value) {
+	case "SUCCESS", "SUCCEEDED", "COMPLETED", "IDLE", "HEALTHY":
+		return resource.CellGood
+	case "FAILED", "INTERNAL_ERROR", "ERROR", "UNHEALTHY":
+		return resource.CellBad
+	case "CANCELED", "CANCELLED", "TIMEDOUT", "TIMED_OUT", "SKIPPED", "TERMINATING":
+		return resource.CellWarn
+	case "RUNNING", "PENDING", "STARTING", "INITIALIZING", "SETTING_UP_TABLES",
+		"WAITING_FOR_RESOURCES", "QUEUED", "CREATED":
+		return resource.CellRunning
+	default:
+		return resource.CellDefault
+	}
+}

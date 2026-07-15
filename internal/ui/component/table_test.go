@@ -1,6 +1,7 @@
 package component
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -103,6 +104,64 @@ func TestSortSurvivesRefresh(t *testing.T) {
 		},
 	)
 	assert.Equal(t, []string{"alpha", "zeta"}, ids(tbl), "sort re-applies to fresh poll data")
+}
+
+// ansiPrefix returns the leading escape sequence a style emits, so tests can
+// assert its presence in rendered output without hardcoding color codes.
+func ansiPrefix(t *testing.T, styled string) string {
+	t.Helper()
+	i := strings.IndexByte(styled, 'm')
+	require.GreaterOrEqual(t, i, 0, "styled string should contain an SGR sequence")
+	return styled[:i+1]
+}
+
+func styledTable(t *testing.T) Table {
+	t.Helper()
+	th := theme.Default()
+	tbl := NewTable(th)
+	tbl.SetCellStyler(func(col int, value string) resource.CellClass {
+		if col == 1 {
+			switch value {
+			case "SUCCESS":
+				return resource.CellGood
+			case "FAILED":
+				return resource.CellBad
+			}
+		}
+		return resource.CellDefault
+	})
+	tbl.SetSize(80, 20)
+	tbl.SetData(
+		[]resource.Column{{Title: "NAME"}, {Title: "STATE", Width: 12}},
+		[]resource.Row{
+			{ID: "b", Cells: []string{"b-job", "FAILED"}},
+			{ID: "a", Cells: []string{"a-job", "SUCCESS"}},
+		},
+	)
+	return tbl
+}
+
+func TestCellStylerColorsCellsButKeepsRawCells(t *testing.T) {
+	th := theme.Default()
+	tbl := styledTable(t)
+
+	view := tbl.View()
+	assert.Contains(t, view, ansiPrefix(t, th.Success.Render("x")), "SUCCESS cell rendered with success color")
+	assert.Contains(t, view, ansiPrefix(t, th.Error.Render("x")), "FAILED cell rendered with error color")
+
+	// Raw cells accessed for filter/sort must remain unstyled.
+	for _, r := range tbl.rows {
+		for _, c := range r.Cells {
+			assert.NotContains(t, c, "\x1b[", "raw cell %q must stay unstyled", c)
+		}
+	}
+}
+
+func TestCellStylerSortingOperatesOnRawValues(t *testing.T) {
+	tbl := styledTable(t)
+	// Sort by the styled STATE column (index 1) ascending.
+	tbl = press(tbl, "s", "right", "s", "enter")
+	assert.Equal(t, []string{"b", "a"}, ids(tbl), "FAILED sorts before SUCCESS on raw text")
 }
 
 func TestCellLess(t *testing.T) {
