@@ -3,11 +3,14 @@ package view
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
@@ -39,6 +42,13 @@ type Browser struct {
 	filter    component.FilterBar
 	filtering bool
 	filterVal string
+
+	// Tag filter (defs implementing resource.Tagger): the `t` popup toggles
+	// tags; rows must carry ALL selected tags to stay visible.
+	tagMode     bool
+	tagOptions  []string
+	tagCursor   int
+	tagSelected map[string]bool
 
 	allRows   []resource.Row
 	fetchedAt time.Time
@@ -130,6 +140,13 @@ func (b *Browser) Title() string {
 // Hints lists browser keys for the header. In sort mode the hints switch to
 // the column picker's keys.
 func (b *Browser) Hints() []key.Binding {
+	if b.tagMode {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle tag")),
+			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear all")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
+		}
+	}
 	if b.table.InSortMode() {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("left"), key.WithHelp("←/→", "pick column")),
@@ -148,6 +165,9 @@ func (b *Browser) Hints() []key.Binding {
 		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite")),
 		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl-r", "refresh")),
 	)
+	if _, ok := b.def.(resource.Tagger); ok {
+		hints = append(hints, key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "tags")))
+	}
 	for _, a := range b.def.Actions() {
 		hints = append(hints, key.NewBinding(key.WithKeys(a.Key), key.WithHelp(a.Key, a.Name)))
 	}
@@ -195,9 +215,67 @@ func (b *Browser) Update(msg tea.Msg) (View, tea.Cmd) {
 			b.table, cmd = b.table.Update(kmsg)
 			return b, cmd
 		}
+		if b.tagMode {
+			b.handleTagKey(kmsg.String())
+			return b, nil
+		}
 		return b.handleKey(kmsg)
 	}
 	return b, nil
+}
+
+// handleTagKey drives the tag-filter popup.
+func (b *Browser) handleTagKey(key string) {
+	switch key {
+	case "j", "down":
+		if b.tagCursor < len(b.tagOptions)-1 {
+			b.tagCursor++
+		}
+	case "k", "up":
+		if b.tagCursor > 0 {
+			b.tagCursor--
+		}
+	case "space", "enter":
+		if len(b.tagOptions) > 0 {
+			tag := b.tagOptions[b.tagCursor]
+			if b.tagSelected[tag] {
+				delete(b.tagSelected, tag)
+			} else {
+				b.tagSelected[tag] = true
+			}
+			b.refreshTable() // live effect while the popup is open
+		}
+	case "c":
+		clear(b.tagSelected)
+		b.refreshTable()
+	case "esc", "t", "q":
+		b.tagMode = false
+	}
+}
+
+// openTagPopup collects the distinct tags across current rows.
+func (b *Browser) openTagPopup(tagger resource.Tagger) tea.Cmd {
+	seen := map[string]bool{}
+	options := []string{}
+	for _, r := range b.allRows {
+		for _, tag := range tagger.RowTags(r) {
+			if !seen[tag] {
+				seen[tag] = true
+				options = append(options, tag)
+			}
+		}
+	}
+	sort.Strings(options)
+	if len(options) == 0 {
+		return func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "no tags on " + b.def.Name()} }
+	}
+	b.tagOptions = options
+	b.tagCursor = 0
+	if b.tagSelected == nil {
+		b.tagSelected = map[string]bool{}
+	}
+	b.tagMode = true
+	return nil
 }
 
 func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
@@ -213,7 +291,17 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			b.refreshTable()
 			return b, nil
 		}
+		if len(b.tagSelected) > 0 {
+			clear(b.tagSelected)
+			b.refreshTable()
+			return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "tag filter cleared"} }
+		}
 		return b, func() tea.Msg { return PopMsg{} }
+	case "t":
+		if tagger, ok := b.def.(resource.Tagger); ok {
+			cmd := b.openTagPopup(tagger)
+			return b, cmd
+		}
 	case "ctrl+r":
 		b.eng.RefreshNow(b.key)
 		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "refreshing…"} }
@@ -343,6 +431,11 @@ func (b *Browser) refreshTable() {
 			}
 		}
 	}
+	if len(b.tagSelected) > 0 {
+		if tagger, ok := b.def.(resource.Tagger); ok {
+			filtered = filterByTags(filtered, tagger, b.tagSelected)
+		}
+	}
 	if b.favs == nil {
 		b.table.SetData(b.def.Columns(), filtered)
 		return
@@ -374,7 +467,70 @@ func (b *Browser) refreshTable() {
 	b.table.SetData(cols, append(starred, rest...))
 }
 
-// Render draws the (optional) filter bar, the table, and error states.
+// filterByTags keeps rows carrying ALL selected tags.
+func filterByTags(rows []resource.Row, tagger resource.Tagger, selected map[string]bool) []resource.Row {
+	kept := make([]resource.Row, 0, len(rows))
+	for _, r := range rows {
+		tags := map[string]bool{}
+		for _, tag := range tagger.RowTags(r) {
+			tags[tag] = true
+		}
+		all := true
+		for want := range selected {
+			if !tags[want] {
+				all = false
+				break
+			}
+		}
+		if all {
+			kept = append(kept, r)
+		}
+	}
+	return kept
+}
+
+// renderTagPopup draws the tag-filter panel shown above the table.
+func (b *Browser) renderTagPopup(width int) string {
+	var lines []string
+	lines = append(lines, b.th.Title.Render("filter by tags")+
+		b.th.Subtle.Render("  space toggle · c clear · esc close"))
+	for i, tag := range b.tagOptions {
+		marker := "[ ]"
+		style := b.th.KeyLabel
+		if b.tagSelected[tag] {
+			marker = "[x]"
+			style = b.th.KeyHint
+		}
+		line := " " + marker + " " + tag
+		if i == b.tagCursor {
+			line = b.th.Title.Render("▶") + line[1:]
+		}
+		lines = append(lines, style.Render(line))
+	}
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(b.th.Accent).
+		Padding(0, 1).
+		MaxWidth(width).
+		Render(strings.Join(lines, "\n"))
+	return panel
+}
+
+// tagStatus is the active-tags indicator shown above the table.
+func (b *Browser) tagStatus() string {
+	if len(b.tagSelected) == 0 {
+		return ""
+	}
+	tags := make([]string, 0, len(b.tagSelected))
+	for tag := range b.tagSelected {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	return b.th.KeyHint.Render("⚑ " + strings.Join(tags, ", "))
+}
+
+// Render draws the (optional) filter bar, tag popup, the table, and error
+// states.
 func (b *Browser) Render(width, height int) string {
 	b.width, b.height = width, height
 
@@ -382,6 +538,14 @@ func (b *Browser) Render(width, height int) string {
 	tableHeight := height
 	if b.filtering || b.filterVal != "" {
 		top = b.filter.View(b.th, width) + "\n"
+		tableHeight--
+	}
+	if b.tagMode {
+		popup := b.renderTagPopup(width)
+		top += popup + "\n"
+		tableHeight -= lipgloss.Height(popup) + 1
+	} else if ts := b.tagStatus(); ts != "" {
+		top += ts + "\n"
 		tableHeight--
 	}
 

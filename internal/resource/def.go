@@ -98,6 +98,13 @@ type Styler interface {
 	CellClass(col int, value string) CellClass
 }
 
+// Tagger is optionally implemented by defs whose rows carry tags (e.g. job
+// custom tags). The browser offers an interactive tag filter for them.
+// Returned tags should be stable, display-ready strings like "env=prod".
+type Tagger interface {
+	RowTags(row Row) []string
+}
+
 // Def is the interface every browsable resource implements.
 type Def interface {
 	// Name is the canonical command name, e.g. "tables".

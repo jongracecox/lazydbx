@@ -141,6 +141,8 @@ type Job struct {
 	LastRunAt     time.Time `yaml:"last_run_at,omitempty" json:"last_run_at,omitempty"`
 	LastRunState  string    `yaml:"last_run_state,omitempty" json:"last_run_state,omitempty"`
 	LastRunResult string    `yaml:"last_run_result,omitempty" json:"last_run_result,omitempty"`
+	// Tags are the job's custom tags (key → value, values may be empty).
+	Tags map[string]string `yaml:"tags,omitempty" json:"tags,omitempty"`
 }
 
 // Run is one job run.

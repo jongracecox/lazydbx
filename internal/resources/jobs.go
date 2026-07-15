@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,25 @@ func (JobsDef) CellClass(col int, value string) resource.CellClass {
 		return stateClass(value)
 	}
 	return resource.CellDefault
+}
+
+// RowTags implements resource.Tagger from the job's custom tags, rendered
+// "key=value" (bare "key" when the value is empty), sorted.
+func (JobsDef) RowTags(row resource.Row) []string {
+	job, ok := row.Data.(dbx.Job)
+	if !ok || len(job.Tags) == 0 {
+		return nil
+	}
+	tags := make([]string, 0, len(job.Tags))
+	for k, v := range job.Tags {
+		if v == "" {
+			tags = append(tags, k)
+		} else {
+			tags = append(tags, k+"="+v)
+		}
+	}
+	sort.Strings(tags)
+	return tags
 }
 
 func (JobsDef) List(ctx context.Context, c *dbx.Clients, _ resource.Scope) ([]resource.Row, error) {

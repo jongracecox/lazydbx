@@ -33,8 +33,10 @@ func (d jobsDAO) List(ctx context.Context) ([]Job, error) {
 	for i := range bases {
 		bj := &bases[i]
 		name := ""
+		var tags map[string]string
 		if bj.Settings != nil {
 			name = DecodeEscapes(bj.Settings.Name)
+			tags = bj.Settings.Tags
 		}
 		out = append(out, Job{
 			ID:        bj.JobId,
@@ -42,6 +44,7 @@ func (d jobsDAO) List(ctx context.Context) ([]Job, error) {
 			Schedule:  scheduleSummary(bj.Settings),
 			Creator:   bj.CreatorUserName,
 			CreatedAt: millisToTime(bj.CreatedTime),
+			Tags:      tags,
 		})
 	}
 

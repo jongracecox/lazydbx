@@ -85,6 +85,70 @@ func TestBrowserFavorites(t *testing.T) {
 	assert.False(t, favs.IsFavorite("test", "jobs|", "beta"))
 }
 
+// taggedDef wraps crumbDef with per-row tags for tag-filter tests.
+type taggedDef struct {
+	crumbDef
+	tags map[string][]string // row ID → tags
+}
+
+func (d taggedDef) RowTags(row resource.Row) []string { return d.tags[row.ID] }
+
+func TestBrowserTagFilter(t *testing.T) {
+	def := taggedDef{
+		crumbDef: crumbDef{name: "jobs", cols: []resource.Column{{Title: "NAME"}}},
+		tags: map[string][]string{
+			"a": {"env=prod", "team=data"},
+			"b": {"env=dev"},
+			"c": {"env=prod"},
+		},
+	}
+	b := newTestBrowser(def, resource.Scope{})
+	b.Render(100, 30)
+	b.applyData(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "a", Cells: []string{"a"}},
+		{ID: "b", Cells: []string{"b"}},
+		{ID: "c", Cells: []string{"c"}},
+	}})
+
+	// t opens the popup with distinct sorted tags.
+	_, _ = b.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	require.True(t, b.tagMode)
+	assert.Equal(t, []string{"env=dev", "env=prod", "team=data"}, b.tagOptions)
+
+	// Select env=prod (cursor 0 is env=dev; move down once).
+	_, _ = b.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	_, _ = b.Update(tea.KeyPressMsg{Code: tea.KeySpace})
+	assert.Equal(t, 2, b.table.Len(), "a and c carry env=prod")
+
+	// AND semantics: also require team=data → only a remains.
+	_, _ = b.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	_, _ = b.Update(tea.KeyPressMsg{Code: tea.KeySpace})
+	assert.Equal(t, 1, b.table.Len())
+	row, _ := b.table.SelectedRow()
+	assert.Equal(t, "a", row.ID)
+
+	// Close popup; filter persists; esc clears it.
+	_, _ = b.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.False(t, b.tagMode)
+	assert.Equal(t, 1, b.table.Len(), "filter persists after closing popup")
+	assert.Contains(t, b.Render(100, 30), "⚑", "active-tags indicator shown")
+
+	_, _ = b.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Equal(t, 3, b.table.Len(), "esc clears the tag filter")
+}
+
+func TestBrowserTagPopupNoTags(t *testing.T) {
+	def := taggedDef{crumbDef: crumbDef{name: "jobs", cols: []resource.Column{{Title: "NAME"}}}}
+	b := newTestBrowser(def, resource.Scope{})
+	b.Render(100, 30)
+	b.applyData(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "a", Cells: []string{"a"}}}})
+
+	_, cmd := b.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	assert.False(t, b.tagMode)
+	require.NotNil(t, cmd)
+	assert.Contains(t, cmd().(FlashMsg).Text, "no tags")
+}
+
 func TestBrowserSkipsStaleRowsWithWrongArity(t *testing.T) {
 	// def with 2 columns; cached rows carry 1 cell (older schema).
 	def := crumbDef{name: "jobs", cols: []resource.Column{{Title: "A"}, {Title: "B"}}}
