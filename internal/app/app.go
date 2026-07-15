@@ -74,8 +74,9 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 	return m
 }
 
-// selectProfile switches clients/theme and resets the stack to the default
-// resource browser.
+// selectProfile switches clients/theme and resets the stack to the profile
+// picker (the permanent top level — esc from the default browser lands
+// there) with the default resource browser above it.
 func (m *Model) selectProfile(p dbx.Profile) {
 	m.clients = m.pool.Get(p)
 	m.th = theme.ForProfile(p.Name, m.cfg.Skins)
@@ -84,9 +85,9 @@ func (m *Model) selectProfile(p dbx.Profile) {
 	for _, v := range m.stack {
 		v.Close()
 	}
-	m.stack = nil
+	m.stack = []view.View{view.NewPicker(m.th, m.profiles)}
 	if def, ok := m.registry.Get(defaultResource); ok {
-		m.stack = []view.View{m.newBrowser(def, resource.Scope{}, "")}
+		m.stack = append(m.stack, m.newBrowser(def, resource.Scope{}, ""))
 	}
 }
 

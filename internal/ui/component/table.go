@@ -177,13 +177,13 @@ func (t *Table) reflow() {
 func (t *Table) decorateTitle(title string, colIdx, visPos int) string {
 	if t.sortCol == colIdx {
 		if t.sortAsc {
-			title += "↑"
+			title += " ↑"
 		} else {
-			title += "↓"
+			title += " ↓"
 		}
 	}
 	if t.sortMode && visPos == t.highlight {
-		title = "▶" + title
+		title = "▶ " + title
 	}
 	return title
 }
