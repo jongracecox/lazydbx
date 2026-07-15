@@ -164,15 +164,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.OpenLogMsg:
 		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
 
-	case view.OpenTableMsg:
-		tabs := []view.Tab{}
-		if columnsDef, ok := m.registry.Get("columns"); ok {
-			tabs = append(tabs, view.Tab{Name: "columns", View: m.newBrowser(columnsDef, msg.Scope, "")})
+	case view.OpenTabsMsg:
+		tabs := make([]view.Tab, 0, len(msg.Tabs))
+		for _, spec := range msg.Tabs {
+			switch {
+			case spec.Log != nil:
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLogView(m.th, spec.Name, spec.Log.Fetch, spec.Log.Follow)})
+			case spec.Detail != nil:
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLazyDescribe(m.th, msg.Title, spec.Detail)})
+			case spec.SQL != nil:
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewSQLView(m.th, m.clients, m.cfg.SQL, spec.SQL.Query, spec.SQL.Execute)})
+			case spec.Browse != nil:
+				if def, ok := m.registry.Get(spec.Browse.Resource); ok {
+					tabs = append(tabs, view.Tab{Name: spec.Name, View: m.newBrowser(def, spec.Browse.Scope, "")})
+				}
+			}
 		}
-		tabs = append(tabs,
-			view.Tab{Name: "data", View: view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, true)},
-			view.Tab{Name: "details", View: view.NewLazyDescribe(m.th, msg.Title, msg.Detail)},
-		)
+		if len(tabs) == 0 {
+			return m, nil
+		}
 		return m.push(view.NewTabbed(m.th, msg.Title, tabs))
 
 	case view.ProfileSelectedMsg:

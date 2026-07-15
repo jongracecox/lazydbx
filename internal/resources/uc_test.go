@@ -120,13 +120,18 @@ func TestTablesDefEnterOpensTabbedView(t *testing.T) {
 	scope := resource.Scope{"catalog": "main", "schema": "silver"}
 
 	msg := TablesDef{}.EnterMsg(c, scope, resource.Row{ID: "events"})
-	open, ok := msg.(view.OpenTableMsg)
+	open, ok := msg.(view.OpenTabsMsg)
 	require.True(t, ok)
 	assert.Equal(t, "events", open.Title)
-	assert.Equal(t, resource.Scope{"catalog": "main", "schema": "silver", "table": "events"}, open.Scope)
-	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Query)
+	require.Len(t, open.Tabs, 3)
 
-	detail, err := open.Detail(context.Background())
+	assert.Equal(t, "columns", open.Tabs[0].Name)
+	assert.Equal(t, resource.Scope{"catalog": "main", "schema": "silver", "table": "events"}, open.Tabs[0].Browse.Scope)
+	assert.Equal(t, "data", open.Tabs[1].Name)
+	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Tabs[1].SQL.Query)
+	assert.True(t, open.Tabs[1].SQL.Execute)
+
+	detail, err := open.Tabs[2].Detail(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"main", "silver", "events"}, gotFull, "detail fetch binds the full path")
 	assert.Equal(t, "events", detail.(dbx.TableDetail).Name)

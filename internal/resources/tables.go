@@ -52,16 +52,18 @@ func (TablesDef) Actions() []resource.Action {
 // (columns │ data │ details) instead of a plain child drill-down.
 func (TablesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 	catalog, schema, table := scope["catalog"], scope["schema"], row.ID
-	return view.OpenTableMsg{
+	return view.OpenTabsMsg{
 		Title: table,
-		Scope: scope.Merge("table", table),
-		Query: previewQuery(scope, table),
-		Detail: func(ctx context.Context) (any, error) {
-			dao, err := c.Tables()
-			if err != nil {
-				return nil, err
-			}
-			return dao.Get(ctx, catalog, schema, table)
+		Tabs: []view.TabSpec{
+			{Name: "columns", Browse: &view.BrowseTabSpec{Resource: "columns", Scope: scope.Merge("table", table)}},
+			{Name: "data", SQL: &view.SQLTabSpec{Query: previewQuery(scope, table), Execute: true}},
+			{Name: "details", Detail: func(ctx context.Context) (any, error) {
+				dao, err := c.Tables()
+				if err != nil {
+					return nil, err
+				}
+				return dao.Get(ctx, catalog, schema, table)
+			}},
 		},
 	}
 }

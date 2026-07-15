@@ -67,6 +67,32 @@ func (UpdatesDef) Actions() []resource.Action {
 	}
 }
 
+// EnterMsg implements resource.Opener: selecting an update opens tabs —
+// the pipeline event log beside the update's metadata.
+func (UpdatesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
+	pipelineID := scope["pipeline"]
+	data := row.Data
+	title := row.ID
+	if len(title) > 12 {
+		title = title[:12] + "…"
+	}
+	return view.OpenTabsMsg{
+		Title: title,
+		Tabs: []view.TabSpec{
+			{Name: "events", Log: &view.LogTabSpec{
+				Fetch: func(ctx context.Context) (string, error) {
+					dao, err := c.Pipelines()
+					if err != nil {
+						return "", err
+					}
+					return dao.Events(ctx, pipelineID, pipelineEventsLimit)
+				},
+			}},
+			{Name: "details", Detail: func(context.Context) (any, error) { return data, nil }},
+		},
+	}
+}
+
 func (UpdatesDef) List(ctx context.Context, c *dbx.Clients, scope resource.Scope) ([]resource.Row, error) {
 	dao, err := c.Pipelines()
 	if err != nil {

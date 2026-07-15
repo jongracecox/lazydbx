@@ -383,3 +383,89 @@ func TestJobsDefListError(t *testing.T) {
 	_, err := JobsDef{}.List(context.Background(), c, resource.Scope{})
 	assert.ErrorContains(t, err, "boom")
 }
+
+func TestTaskRunsEnterOpensTabs(t *testing.T) {
+	var gotID int64
+	c := clientsWithJobs(fakeJobsDAO{
+		GetRunOutputFn: func(_ context.Context, id int64) (string, error) {
+			gotID = id
+			return "task output", nil
+		},
+	})
+	task := dbx.TaskRun{RunID: 777, Key: "transform", State: "RUNNING"}
+
+	msg := TaskRunsDef{}.EnterMsg(c, resource.Scope{}, resource.Row{ID: "777", Data: task})
+	open, ok := msg.(view.OpenTabsMsg)
+	require.True(t, ok)
+	assert.Equal(t, "transform", open.Title)
+	require.Len(t, open.Tabs, 2)
+	assert.Equal(t, "logs", open.Tabs[0].Name)
+	assert.True(t, open.Tabs[0].Log.Follow, "running task follows")
+
+	out, err := open.Tabs[0].Log.Fetch(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "task output", out)
+	assert.Equal(t, int64(777), gotID, "fetch uses the task-level run id")
+
+	detail, err := open.Tabs[1].Detail(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, task, detail)
+}
+
+func TestTaskRunsEnterStaleCache(t *testing.T) {
+	// Disk-cached rows round-trip Data through JSON, arriving as maps.
+	msg := TaskRunsDef{}.EnterMsg(nil, resource.Scope{}, resource.Row{ID: "777", Data: map[string]any{"key": "x"}})
+	flash, ok := msg.(view.FlashMsg)
+	require.True(t, ok)
+	assert.Contains(t, flash.Text, "stale cache")
+}
+
+func TestRunsLogsActionPicksFailedTask(t *testing.T) {
+	var outputID int64
+	c := clientsWithJobs(fakeJobsDAO{
+		GetRunTasksFn: func(_ context.Context, runID int64) ([]dbx.TaskRun, error) {
+			assert.Equal(t, int64(42), runID)
+			return []dbx.TaskRun{
+				{RunID: 1, Key: "ok-task", State: "TERMINATED", Result: "SUCCESS"},
+				{RunID: 2, Key: "bad-task", State: "TERMINATED", Result: "FAILED"},
+			}, nil
+		},
+		GetRunOutputFn: func(_ context.Context, id int64) (string, error) {
+			outputID = id
+			return "boom", nil
+		},
+	})
+
+	actions := RunsDef{}.Actions()
+	require.Len(t, actions, 1)
+	msg := actions[0].Run(context.Background(), c, resource.Scope{}, resource.Row{ID: "42", Data: dbx.Run{State: "TERMINATED"}})
+	open := msg.(view.OpenLogMsg)
+	assert.False(t, open.Follow)
+
+	out, err := open.Fetch(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), outputID, "failed task wins")
+	assert.Contains(t, out, "bad-task")
+	assert.Contains(t, out, "boom")
+	assert.Contains(t, out, "2 tasks", "multi-task note present")
+}
+
+func TestUpdatesEnterOpensTabs(t *testing.T) {
+	c := clientsWithPipelines(fakePipelinesDAO{
+		EventsFn: func(_ context.Context, id string, _ int) (string, error) {
+			assert.Equal(t, "pl-1", id)
+			return "event log", nil
+		},
+	})
+	upd := dbx.PipelineUpdate{ID: "abcdef0123456789", State: "COMPLETED"}
+
+	msg := UpdatesDef{}.EnterMsg(c, resource.Scope{"pipeline": "pl-1"}, resource.Row{ID: upd.ID, Data: upd})
+	open, ok := msg.(view.OpenTabsMsg)
+	require.True(t, ok)
+	assert.Equal(t, "abcdef012345…", open.Title, "long update ids truncate")
+	require.Len(t, open.Tabs, 2)
+
+	out, err := open.Tabs[0].Log.Fetch(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "event log", out)
+}

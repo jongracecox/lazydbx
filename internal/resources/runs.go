@@ -8,6 +8,7 @@ import (
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/resource"
+	"github.com/jongracecox/lazydbx/internal/ui/view"
 )
 
 const runsListLimit = 100
@@ -41,7 +42,67 @@ func (RunsDef) ChildScope(parent resource.Scope, row resource.Row) resource.Scop
 	return parent.Merge("run", row.ID)
 }
 
-func (RunsDef) Actions() []resource.Action { return nil }
+// Actions: `l` opens the run's logs without drilling into tasks — it picks
+// the first failed task, falling back to the first task (the common
+// single-task-job case just works).
+func (RunsDef) Actions() []resource.Action {
+	return []resource.Action{
+		{
+			Key:      "l",
+			Name:     "logs",
+			NeedsRow: true,
+			Run: func(_ context.Context, c *dbx.Clients, _ resource.Scope, row resource.Row) any {
+				runID, err := strconv.ParseInt(row.ID, 10, 64)
+				if err != nil {
+					return view.FlashMsg{Level: view.FlashError, Text: "bad run id " + row.ID}
+				}
+				follow := false
+				if run, ok := row.Data.(dbx.Run); ok {
+					follow = isRunningState(run.State)
+				}
+				return view.OpenLogMsg{
+					Title:  "logs/run-" + row.ID,
+					Follow: follow,
+					Fetch:  runLogsFetch(c, runID),
+				}
+			},
+		},
+	}
+}
+
+// runLogsFetch resolves a job run to its most interesting task's output:
+// the first failed task, else the first task.
+func runLogsFetch(c *dbx.Clients, runID int64) func(ctx context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		dao, err := c.Jobs()
+		if err != nil {
+			return "", err
+		}
+		tasks, err := dao.GetRunTasks(ctx, runID)
+		if err != nil {
+			return "", err
+		}
+		if len(tasks) == 0 {
+			return "(run has no tasks)", nil
+		}
+		pick := tasks[0]
+		for _, t := range tasks {
+			if stateClass(t.Result) == resource.CellBad || stateClass(t.State) == resource.CellBad {
+				pick = t
+				break
+			}
+		}
+		out, err := dao.GetRunOutput(ctx, pick.RunID)
+		if err != nil {
+			return "", err
+		}
+		header := fmt.Sprintf("── task %s (%s %s) ──", pick.Key, pick.State, pick.Result)
+		if len(tasks) > 1 {
+			header += fmt.Sprintf("  [1 of %d tasks — enter the run to pick others]", len(tasks))
+		}
+		return header + "\n\n" + out, nil
+	}
+}
 
 // CellClass colors the STATE and RESULT columns semantically.
 func (RunsDef) CellClass(col int, value string) resource.CellClass {

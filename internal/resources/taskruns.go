@@ -72,6 +72,31 @@ func (TaskRunsDef) Actions() []resource.Action {
 	}
 }
 
+// EnterMsg implements resource.Opener: selecting a task run opens tabs —
+// its logs beside its metadata — instead of bare describe.
+func (TaskRunsDef) EnterMsg(c *dbx.Clients, _ resource.Scope, row resource.Row) any {
+	task, ok := row.Data.(dbx.TaskRun)
+	if !ok {
+		return view.FlashMsg{Level: view.FlashWarn, Text: "task details unavailable (stale cache) — refresh with r"}
+	}
+	return view.OpenTabsMsg{
+		Title: task.Key,
+		Tabs: []view.TabSpec{
+			{Name: "logs", Log: &view.LogTabSpec{
+				Follow: isRunningState(task.State),
+				Fetch: func(ctx context.Context) (string, error) {
+					dao, err := c.Jobs()
+					if err != nil {
+						return "", err
+					}
+					return dao.GetRunOutput(ctx, task.RunID)
+				},
+			}},
+			{Name: "details", Detail: func(context.Context) (any, error) { return task, nil }},
+		},
+	}
+}
+
 func (TaskRunsDef) List(ctx context.Context, c *dbx.Clients, scope resource.Scope) ([]resource.Row, error) {
 	runID, err := parseScopeInt(scope, "run")
 	if err != nil {

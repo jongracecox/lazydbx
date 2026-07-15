@@ -51,14 +51,45 @@ type OpenSQLMsg struct {
 	Execute bool
 }
 
-// OpenTableMsg asks the app to open the tabbed table view (columns │ data │
-// details) for one table. Query is the ready-to-run preview statement;
-// Detail lazily fetches the full table description.
-type OpenTableMsg struct {
-	Title  string
-	Scope  resource.Scope
-	Query  string
+// TabSpec declares one tab of an OpenTabsMsg without constructing the view
+// (views need theme/engine wiring only the app has). Exactly one content
+// field must be set.
+type TabSpec struct {
+	Name string
+	// Log shows a log viewer over the fetched text.
+	Log *LogTabSpec
+	// Detail shows a lazily fetched describe view.
 	Detail func(ctx context.Context) (any, error)
+	// Browse shows a resource browser.
+	Browse *BrowseTabSpec
+	// SQL shows the SQL editor/preview.
+	SQL *SQLTabSpec
+}
+
+// LogTabSpec parameterizes a log tab.
+type LogTabSpec struct {
+	Fetch  func(ctx context.Context) (string, error)
+	Follow bool
+}
+
+// BrowseTabSpec parameterizes a resource-browser tab.
+type BrowseTabSpec struct {
+	Resource string
+	Scope    resource.Scope
+}
+
+// SQLTabSpec parameterizes a SQL tab.
+type SQLTabSpec struct {
+	Query   string
+	Execute bool
+}
+
+// OpenTabsMsg asks the app to open a tabbed view — how defs whose Enter
+// outgrows plain drill-down (tables, task runs, updates) declare their
+// sibling views.
+type OpenTabsMsg struct {
+	Title string
+	Tabs  []TabSpec
 }
 
 // OpenLogMsg asks the app to open the log viewer on a text source. Fetch is
