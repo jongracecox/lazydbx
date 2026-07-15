@@ -31,9 +31,11 @@ type Clients struct {
 // nil (SDK-backed DAOs are built lazily); tests inject fakes so resource
 // defs run without any SDK or network involvement.
 type DAOs struct {
-	Catalogs CatalogsDAO
-	Schemas  SchemasDAO
-	Tables   TablesDAO
+	Catalogs   CatalogsDAO
+	Schemas    SchemasDAO
+	Tables     TablesDAO
+	Warehouses WarehousesDAO
+	Statements StatementDAO
 }
 
 // NewClients wraps a profile; no network I/O happens until first use.
@@ -100,6 +102,30 @@ func (c *Clients) Tables() (TablesDAO, error) {
 		return nil, err
 	}
 	return tablesDAO{w: w}, nil
+}
+
+// Warehouses returns the warehouses DAO.
+func (c *Clients) Warehouses() (WarehousesDAO, error) {
+	if c.daos.Warehouses != nil {
+		return c.daos.Warehouses, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return warehousesDAO{w: w}, nil
+}
+
+// Statements returns the statement execution DAO.
+func (c *Clients) Statements() (StatementDAO, error) {
+	if c.daos.Statements != nil {
+		return c.daos.Statements, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return statementDAO{w: w}, nil
 }
 
 // Pool caches one Clients per profile name.

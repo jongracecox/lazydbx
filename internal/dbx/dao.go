@@ -73,3 +73,57 @@ type TablesDAO interface {
 	List(ctx context.Context, catalog, schema string) ([]Table, error)
 	Get(ctx context.Context, catalog, schema, table string) (TableDetail, error)
 }
+
+// Warehouse is a SQL warehouse, reduced to what selection and display need.
+type Warehouse struct {
+	ID         string `yaml:"id" json:"id"`
+	Name       string `yaml:"name" json:"name"`
+	State      string `yaml:"state" json:"state"` // RUNNING, STOPPED, STARTING, ...
+	Size       string `yaml:"size" json:"size"`
+	Serverless bool   `yaml:"serverless" json:"serverless"`
+}
+
+// WarehousesDAO lists SQL warehouses.
+type WarehousesDAO interface {
+	List(ctx context.Context) ([]Warehouse, error)
+}
+
+// StmtColumn describes one column of a statement result.
+type StmtColumn struct {
+	Name string
+	Type string
+}
+
+// StmtResult is a decoded INLINE statement result.
+type StmtResult struct {
+	Columns []StmtColumn
+	Rows    [][]string
+	// Truncated is set when the server returned more data than the first
+	// chunk / row limit — the UI shows a "showing first N rows" banner.
+	Truncated bool
+}
+
+// Statement lifecycle states as returned by StatementPoll.State.
+const (
+	StmtPending   = "PENDING"
+	StmtRunning   = "RUNNING"
+	StmtSucceeded = "SUCCEEDED"
+	StmtFailed    = "FAILED"
+	StmtCanceled  = "CANCELED"
+	StmtClosed    = "CLOSED"
+)
+
+// StatementPoll is one observation of an executing statement.
+type StatementPoll struct {
+	State   string
+	Result  *StmtResult // non-nil when State == StmtSucceeded
+	Message string      // error detail when State == StmtFailed
+}
+
+// StatementDAO executes SQL asynchronously: Submit returns immediately with
+// a statement ID; Poll observes progress; Cancel aborts.
+type StatementDAO interface {
+	Submit(ctx context.Context, warehouseID, statement string, rowLimit int) (string, error)
+	Poll(ctx context.Context, statementID string) (StatementPoll, error)
+	Cancel(ctx context.Context, statementID string) error
+}
