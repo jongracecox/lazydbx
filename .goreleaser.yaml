@@ -1,0 +1,44 @@
+version: 2
+
+project_name: lazydbx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/lazydbx
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/jongracecox/lazydbx/internal/version.Version={{.Version}}
+      - -X github.com/jongracecox/lazydbx/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/jongracecox/lazydbx/internal/version.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+homebrew_casks:
+  - repository:
+      owner: jongracecox
+      name: homebrew-tap
+    homepage: https://github.com/jongracecox/lazydbx
+    description: A lazier way to Databricks — a fast, colorful terminal UI
+    license: Apache-2.0
