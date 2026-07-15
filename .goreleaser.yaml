@@ -43,3 +43,13 @@ homebrew_casks:
     homepage: https://github.com/jongracecox/lazydbx
     description: A lazier way to Databricks — a fast, colorful terminal UI
     license: Apache-2.0
+    # Release binaries are ad-hoc signed (Go linker), not notarized;
+    # Gatekeeper SIGKILLs quarantined ad-hoc binaries on Apple Silicon.
+    # Strip the quarantine attribute on install — the goreleaser-documented
+    # approach until we adopt real signing (cosign/quill).
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/lazydbx"]
+          end
