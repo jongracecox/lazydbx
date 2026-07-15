@@ -37,7 +37,7 @@ func (d catalogsDAO) List(ctx context.Context) ([]Catalog, error) {
 			Name:      ci.Name,
 			Owner:     ci.Owner,
 			Type:      string(ci.CatalogType),
-			Comment:   ci.Comment,
+			Comment:   DecodeEscapes(ci.Comment),
 			CreatedAt: millisToTime(ci.CreatedAt),
 			UpdatedAt: millisToTime(ci.UpdatedAt),
 		})
@@ -61,7 +61,7 @@ func (d schemasDAO) List(ctx context.Context, cat string) ([]Schema, error) {
 		out = append(out, Schema{
 			Name:      si.Name,
 			Owner:     si.Owner,
-			Comment:   si.Comment,
+			Comment:   DecodeEscapes(si.Comment),
 			CreatedAt: millisToTime(si.CreatedAt),
 			UpdatedAt: millisToTime(si.UpdatedAt),
 		})
@@ -108,7 +108,7 @@ func (d tablesDAO) Get(ctx context.Context, cat, schema, table string) (TableDet
 			Name:     col.Name,
 			Type:     col.TypeText,
 			Nullable: col.Nullable,
-			Comment:  col.Comment,
+			Comment:  DecodeEscapes(col.Comment),
 			Position: pos,
 		})
 	}
@@ -122,7 +122,7 @@ func tableFromInfo(ti *catalog.TableInfo) Table {
 		Type:      string(ti.TableType),
 		Format:    string(ti.DataSourceFormat),
 		Owner:     ti.Owner,
-		Comment:   ti.Comment,
+		Comment:   DecodeEscapes(ti.Comment),
 		UpdatedAt: millisToTime(ti.UpdatedAt),
 	}
 }

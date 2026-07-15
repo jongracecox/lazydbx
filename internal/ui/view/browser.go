@@ -90,14 +90,24 @@ func (b *Browser) Title() string {
 	return b.def.Name()
 }
 
-// Hints lists browser keys for the header.
+// Hints lists browser keys for the header. In sort mode the hints switch to
+// the column picker's keys.
 func (b *Browser) Hints() []key.Binding {
+	if b.table.InSortMode() {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("left"), key.WithHelp("←/→", "pick column")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort (again reverses)")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+		}
+	}
 	hints := []key.Binding{}
 	if b.def.Child() != "" {
 		hints = append(hints, key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", b.def.Child())))
 	}
 	hints = append(hints,
 		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
+		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
 		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl-r", "refresh")),
 	)
 	for _, a := range b.def.Actions() {
@@ -141,6 +151,12 @@ func (b *Browser) Update(msg tea.Msg) (View, tea.Cmd) {
 	}
 
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		// Sort mode owns the keyboard until confirmed or canceled.
+		if b.table.InSortMode() {
+			var cmd tea.Cmd
+			b.table, cmd = b.table.Update(kmsg)
+			return b, cmd
+		}
 		return b.handleKey(kmsg)
 	}
 	return b, nil

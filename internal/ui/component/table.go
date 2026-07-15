@@ -4,6 +4,8 @@
 package component
 
 import (
+	"sort"
+
 	btable "charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -15,14 +17,27 @@ import (
 // wideCutoff is the terminal width at which Wide columns become visible.
 const wideCutoff = 110
 
-// Table wraps the bubbles table with resource-aware column sizing and
-// cursor preservation across data refreshes.
+// Table wraps the bubbles table with resource-aware column sizing, cursor
+// preservation across data refreshes, and interactive column sorting:
+// `s` enters sort mode, ←/→ pick a column, `s`/space select it (selecting
+// the sorted column again reverses direction — applied live), enter
+// confirms, esc reverts.
 type Table struct {
-	tbl    btable.Model
-	rows   []resource.Row
-	cols   []resource.Column
-	width  int
-	height int
+	tbl      btable.Model
+	baseRows []resource.Row // as supplied (post-filter), original order
+	rows     []resource.Row // baseRows through the active sort
+	cols     []resource.Column
+	visIdx   []int // visible column -> t.cols index
+	width    int
+	height   int
+
+	sortCol int // index into t.cols; -1 = no sort
+	sortAsc bool
+
+	sortMode  bool
+	highlight int // visible-column index under the picker
+	prevCol   int // sort state to restore on esc
+	prevAsc   bool
 }
 
 // NewTable builds a themed table.
@@ -32,7 +47,7 @@ func NewTable(th theme.Theme) Table {
 	styles.Selected = lipgloss.NewStyle().Reverse(true).Bold(true)
 
 	tbl := btable.New(btable.WithFocused(true), btable.WithStyles(styles))
-	return Table{tbl: tbl}
+	return Table{tbl: tbl, sortCol: -1}
 }
 
 // SetSize resizes the table region. Reflow only happens on actual size
@@ -48,14 +63,16 @@ func (t *Table) SetSize(width, height int) {
 }
 
 // SetData replaces columns and rows, keeping the cursor on the same row ID
-// across refreshes so background polls don't yank the selection.
+// across refreshes so background polls don't yank the selection. The active
+// sort is re-applied to fresh data.
 func (t *Table) SetData(cols []resource.Column, rows []resource.Row) {
 	selectedID := t.SelectedID()
-	t.cols, t.rows = cols, rows
+	t.cols, t.baseRows = cols, rows
+	t.applySort()
 	t.reflow()
 
 	if selectedID != "" {
-		for i, r := range rows {
+		for i, r := range t.rows {
 			if r.ID == selectedID {
 				t.tbl.SetCursor(i)
 				return
@@ -64,19 +81,50 @@ func (t *Table) SetData(cols []resource.Column, rows []resource.Row) {
 	}
 }
 
+// InSortMode reports whether the column picker is active; while true the
+// owning view should route all key input to the table.
+func (t Table) InSortMode() bool { return t.sortMode }
+
+// applySort orders rows by the sort column; no sort keeps supplied order.
+func (t *Table) applySort() {
+	if t.sortCol < 0 || t.sortCol >= len(t.cols) {
+		t.rows = t.baseRows
+		return
+	}
+	t.rows = make([]resource.Row, len(t.baseRows))
+	copy(t.rows, t.baseRows)
+	col, asc := t.sortCol, t.sortAsc
+	sort.SliceStable(t.rows, func(i, j int) bool {
+		var a, b string
+		if col < len(t.rows[i].Cells) {
+			a = t.rows[i].Cells[col]
+		}
+		if col < len(t.rows[j].Cells) {
+			b = t.rows[j].Cells[col]
+		}
+		if asc {
+			return cellLess(a, b)
+		}
+		return cellLess(b, a)
+	})
+}
+
 // reflow recomputes visible columns and widths for the current size.
 func (t *Table) reflow() {
 	if len(t.cols) == 0 {
 		return
 	}
 	visible := make([]resource.Column, 0, len(t.cols))
-	visIdx := make([]int, 0, len(t.cols))
+	t.visIdx = t.visIdx[:0]
 	for i, c := range t.cols {
 		if c.Wide && t.width < wideCutoff {
 			continue
 		}
 		visible = append(visible, c)
-		visIdx = append(visIdx, i)
+		t.visIdx = append(t.visIdx, i)
+	}
+	if len(t.visIdx) > 0 && t.highlight >= len(t.visIdx) {
+		t.highlight = len(t.visIdx) - 1
 	}
 
 	// Fixed columns take their width; flex columns (Width 0) share the rest.
@@ -101,12 +149,12 @@ func (t *Table) reflow() {
 		if w == 0 {
 			w = flexWidth
 		}
-		bcols[i] = btable.Column{Title: c.Title, Width: w}
+		bcols[i] = btable.Column{Title: t.decorateTitle(c.Title, t.visIdx[i], i), Width: w}
 	}
 	brows := make([]btable.Row, len(t.rows))
 	for i, r := range t.rows {
-		cells := make([]string, len(visIdx))
-		for j, src := range visIdx {
+		cells := make([]string, len(t.visIdx))
+		for j, src := range t.visIdx {
 			if src < len(r.Cells) {
 				cells[j] = r.Cells[src]
 			}
@@ -124,11 +172,88 @@ func (t *Table) reflow() {
 	}
 }
 
-// Update forwards navigation keys to the underlying table.
+// decorateTitle marks the sorted column with a direction arrow and, in sort
+// mode, the picker position with a pointer.
+func (t *Table) decorateTitle(title string, colIdx, visPos int) string {
+	if t.sortCol == colIdx {
+		if t.sortAsc {
+			title += "↑"
+		} else {
+			title += "↓"
+		}
+	}
+	if t.sortMode && visPos == t.highlight {
+		title = "▶" + title
+	}
+	return title
+}
+
+// Update forwards navigation keys to the underlying table and drives sort
+// mode.
 func (t Table) Update(msg tea.Msg) (Table, tea.Cmd) {
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		if t.sortMode {
+			t.handleSortKey(kmsg.String())
+			return t, nil
+		}
+		if kmsg.String() == "s" && len(t.visIdx) > 0 {
+			t.sortMode = true
+			t.prevCol, t.prevAsc = t.sortCol, t.sortAsc
+			t.highlight = 0
+			for i, src := range t.visIdx {
+				if src == t.sortCol {
+					t.highlight = i
+				}
+			}
+			t.reflow()
+			return t, nil
+		}
+	}
 	var cmd tea.Cmd
 	t.tbl, cmd = t.tbl.Update(msg)
 	return t, cmd
+}
+
+func (t *Table) handleSortKey(key string) {
+	switch key {
+	case "left", "h":
+		if t.highlight > 0 {
+			t.highlight--
+		}
+	case "right", "l":
+		if t.highlight < len(t.visIdx)-1 {
+			t.highlight++
+		}
+	case "s", "space":
+		t.selectHighlighted()
+	case "enter":
+		// Confirm: apply if the highlight isn't the active sort yet, then
+		// leave sort mode keeping the result.
+		if t.sortCol != t.visIdx[t.highlight] {
+			t.selectHighlighted()
+		}
+		t.sortMode = false
+	case "esc":
+		t.sortCol, t.sortAsc = t.prevCol, t.prevAsc
+		t.sortMode = false
+		t.applySort()
+	default:
+		return
+	}
+	t.reflow()
+}
+
+// selectHighlighted sorts by the highlighted column; selecting the already
+// sorted column reverses direction. Applied live so the effect is visible
+// before confirming.
+func (t *Table) selectHighlighted() {
+	col := t.visIdx[t.highlight]
+	if t.sortCol == col {
+		t.sortAsc = !t.sortAsc
+	} else {
+		t.sortCol, t.sortAsc = col, true
+	}
+	t.applySort()
 }
 
 // View renders the table.
