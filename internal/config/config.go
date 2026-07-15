@@ -23,6 +23,9 @@ type Config struct {
 	LogLevel string    `koanf:"log_level"`
 	Refresh  Refresh   `koanf:"refresh"`
 	SQL      SQLConfig `koanf:"sql"`
+	// Skins maps profile-name globs to accent color names, k9s-style
+	// (e.g. "PROD-*": red). Matching is case-insensitive.
+	Skins map[string]string `koanf:"skins"`
 }
 
 // Refresh controls poll cadence (seconds) for resource views.

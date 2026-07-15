@@ -6,8 +6,11 @@ import "fmt"
 // Populated by goreleaser:
 //
 //	-X github.com/jongracecox/lazydbx/internal/version.Version={{.Version}}
+//
+// Version must stay valid semver even for dev builds — the Databricks SDK's
+// useragent.WithProduct panics on anything else.
 var (
-	Version = "dev"
+	Version = "0.0.0-dev"
 	Commit  = "none"
 	Date    = "unknown"
 )

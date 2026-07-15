@@ -44,7 +44,7 @@ Dependency direction: `cmd → app → ui/view → resource ← resources → db
 
 1. Only `internal/dbx` imports `databricks-sdk-go`. Everything else uses the narrow DAO interfaces in `dbx/dao.go`.
 2. Views never call DAOs or do I/O. Data arrives as messages from the engine; `Update` functions stay pure (return commands, never block).
-3. All tea messages are defined in `internal/app/messages.go` — nowhere else.
+3. Tea messages live in exactly two files: cross-package UI messages (nav, flash, drill-down, profile selection) in `internal/ui/view/msgs.go`; app-internal ones in `internal/app/messages.go`. Engine data arrives as `engine.DataEvent`. Nowhere else.
 4. A new resource = one file in `internal/resources/` + a line in `register.go` + a fake-DAO test. Nothing else should need touching (use `/new-resource`).
 5. The Databricks SDK version is pinned exactly (pre-1.0, breaking changes ~every other release). Never bump it as a side effect of other work.
 6. Mutating actions must set `Dangerous: true` (confirm dialog) and are hidden entirely under `--readonly`.
