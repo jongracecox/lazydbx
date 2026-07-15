@@ -15,6 +15,7 @@ import (
 	"github.com/jongracecox/lazydbx/internal/config"
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
+	"github.com/jongracecox/lazydbx/internal/favorites"
 	"github.com/jongracecox/lazydbx/internal/resource"
 	"github.com/jongracecox/lazydbx/internal/theme"
 	"github.com/jongracecox/lazydbx/internal/ui/component"
@@ -41,6 +42,8 @@ type Model struct {
 	profiles []dbx.Profile
 	clients  *dbx.Clients // nil until a profile is chosen
 
+	favs *favorites.Store
+
 	stack     []view.View
 	cmdbar    component.CmdBar
 	cmdOpen   bool
@@ -58,6 +61,7 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 		pool:     pool,
 		eng:      eng,
 		profiles: profiles,
+		favs:     favorites.NewDefault(),
 		cmdbar:   component.NewCmdBar(completer(registry)),
 	}
 
@@ -102,7 +106,7 @@ func completer(reg *resource.Registry) func(string) []string {
 }
 
 func (m Model) newBrowser(def resource.Def, scope resource.Scope, filter string) view.View {
-	return view.NewBrowser(def, scope, m.clients, m.eng, m.th, filter)
+	return view.NewBrowser(def, scope, m.clients, m.eng, m.th, filter, m.favs)
 }
 
 func (m Model) top() view.View {

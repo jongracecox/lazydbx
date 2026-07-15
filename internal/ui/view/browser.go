@@ -11,6 +11,7 @@ import (
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
+	"github.com/jongracecox/lazydbx/internal/favorites"
 	"github.com/jongracecox/lazydbx/internal/resource"
 	"github.com/jongracecox/lazydbx/internal/theme"
 	"github.com/jongracecox/lazydbx/internal/ui/component"
@@ -32,6 +33,8 @@ type Browser struct {
 	th      theme.Theme
 	key     engine.Key
 
+	favs *favorites.Store
+
 	table     component.Table
 	filter    component.FilterBar
 	filtering bool
@@ -46,20 +49,38 @@ type Browser struct {
 	width, height int
 }
 
-// NewBrowser builds a browser for one def+scope.
-func NewBrowser(def resource.Def, scope resource.Scope, clients *dbx.Clients, eng *engine.Engine, th theme.Theme, initialFilter string) *Browser {
+// favMarker is the cell content of the injected favorites column.
+const favMarker = "*"
+
+// NewBrowser builds a browser for one def+scope. favs may be nil (no
+// favorites column, e.g. in tests).
+func NewBrowser(def resource.Def, scope resource.Scope, clients *dbx.Clients, eng *engine.Engine, th theme.Theme, initialFilter string, favs *favorites.Store) *Browser {
 	table := component.NewTable(th)
-	// Defs that classify their cells (run states, health) drive semantic
-	// coloring; the table maps classes to theme styles at render time.
-	if styler, ok := def.(resource.Styler); ok {
-		table.SetCellStyler(styler.CellClass)
-	}
+	// Cell 0 is the injected favorites star; defs that classify their cells
+	// (run states, health) drive coloring for the rest, shifted by one.
+	defStyler, hasStyler := def.(resource.Styler)
+	table.SetCellStyler(func(col int, value string) resource.CellClass {
+		if favs != nil {
+			if col == 0 {
+				if value == favMarker {
+					return resource.CellRunning // accent — the star pops
+				}
+				return resource.CellDefault
+			}
+			col--
+		}
+		if hasStyler {
+			return defStyler.CellClass(col, value)
+		}
+		return resource.CellDefault
+	})
 	return &Browser{
 		def:     def,
 		scope:   scope,
 		clients: clients,
 		eng:     eng,
 		th:      th,
+		favs:    favs,
 		key: engine.Key{
 			Profile:  clients.Profile().Name,
 			Resource: def.Name(),
@@ -69,6 +90,11 @@ func NewBrowser(def resource.Def, scope resource.Scope, clients *dbx.Clients, en
 		filter:    component.NewFilterBar(),
 		filterVal: initialFilter,
 	}
+}
+
+// favKey scopes favorites to this exact view (resource + drill-down scope).
+func (b *Browser) favKey() string {
+	return b.def.Name() + "|" + b.scope.Hash()
 }
 
 // Init subscribes to the engine; cached rows arrive synchronously.
@@ -119,6 +145,7 @@ func (b *Browser) Hints() []key.Binding {
 	hints = append(hints,
 		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
 		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
+		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite")),
 		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl-r", "refresh")),
 	)
 	for _, a := range b.def.Actions() {
@@ -195,6 +222,21 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			cmd := b.login()
 			return b, cmd
 		}
+	case "f":
+		if b.favs == nil {
+			break
+		}
+		row, ok := b.table.SelectedRow()
+		if !ok {
+			return b, nil
+		}
+		starred := b.favs.Toggle(b.clients.Profile().Name, b.favKey(), row.ID)
+		b.refreshTable()
+		text := "unfavorited " + row.ID
+		if starred {
+			text = "favorited " + row.ID
+		}
+		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: text} }
 	case "enter":
 		cmd := b.drillDown()
 		return b, cmd
@@ -295,7 +337,35 @@ func (b *Browser) refreshTable() {
 			}
 		}
 	}
-	b.table.SetData(b.def.Columns(), filtered)
+	if b.favs == nil {
+		b.table.SetData(b.def.Columns(), filtered)
+		return
+	}
+
+	// Inject the favorites column and float starred rows to the top; both
+	// groups keep their supplied order (name-sorted from the DAO), giving
+	// the favorite-then-name default. Explicit sort mode still overrides.
+	profile, key := b.clients.Profile().Name, b.favKey()
+	starred := make([]resource.Row, 0, len(filtered))
+	rest := make([]resource.Row, 0, len(filtered))
+	for _, r := range filtered {
+		marker := ""
+		if b.favs.IsFavorite(profile, key, r.ID) {
+			marker = favMarker
+		}
+		augmented := resource.Row{
+			ID:    r.ID,
+			Cells: append([]string{marker}, r.Cells...),
+			Data:  r.Data,
+		}
+		if marker != "" {
+			starred = append(starred, augmented)
+		} else {
+			rest = append(rest, augmented)
+		}
+	}
+	cols := append([]resource.Column{{Title: favMarker, Width: 3}}, b.def.Columns()...)
+	b.table.SetData(cols, append(starred, rest...))
 }
 
 // Render draws the (optional) filter bar, the table, and error states.

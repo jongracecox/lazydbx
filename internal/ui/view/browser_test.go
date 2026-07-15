@@ -2,13 +2,17 @@ package view
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
+	"github.com/jongracecox/lazydbx/internal/favorites"
 	"github.com/jongracecox/lazydbx/internal/resource"
 	"github.com/jongracecox/lazydbx/internal/theme"
 )
@@ -39,7 +43,45 @@ func (d crumbDef) Describe(context.Context, *dbx.Clients, resource.Scope, resour
 func newTestBrowser(def resource.Def, scope resource.Scope) *Browser {
 	clients := dbx.NewClientsWithDAOs(dbx.Profile{Name: "test"}, dbx.DAOs{})
 	eng := engine.New(func(engine.DataEvent) {}, nil)
-	return NewBrowser(def, scope, clients, eng, theme.Default(), "")
+	return NewBrowser(def, scope, clients, eng, theme.Default(), "", nil)
+}
+
+func TestBrowserFavorites(t *testing.T) {
+	def := crumbDef{name: "jobs"}
+	clients := dbx.NewClientsWithDAOs(dbx.Profile{Name: "test"}, dbx.DAOs{})
+	eng := engine.New(func(engine.DataEvent) {}, nil)
+	favs := favorites.NewStore(filepath.Join(t.TempDir(), "f.json"))
+	b := NewBrowser(def, resource.Scope{}, clients, eng, theme.Default(), "", favs)
+	b.Render(100, 20) // size the table
+
+	b.applyData(engine.DataEvent{
+		Key: b.key,
+		Rows: []resource.Row{
+			{ID: "alpha", Cells: []string{"alpha"}},
+			{ID: "beta", Cells: []string{"beta"}},
+			{ID: "gamma", Cells: []string{"gamma"}},
+		},
+	})
+
+	// Cursor starts on alpha; move to beta and star it.
+	_, _ = b.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	_, cmd := b.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	require.NotNil(t, cmd)
+	flash := cmd().(FlashMsg)
+	assert.Contains(t, flash.Text, "favorited beta")
+
+	// beta floats to the top with the star marker; others keep order.
+	row, ok := b.table.SelectedRow()
+	require.True(t, ok)
+	assert.Equal(t, "beta", row.ID, "cursor follows the starred row by ID")
+	first, _ := b.table.SelectedRow()
+	assert.Equal(t, favMarker, first.Cells[0])
+	assert.True(t, favs.IsFavorite("test", "jobs|", "beta"), "persisted")
+
+	// Unstar restores original order.
+	_, cmd = b.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	assert.Contains(t, cmd().(FlashMsg).Text, "unfavorited beta")
+	assert.False(t, favs.IsFavorite("test", "jobs|", "beta"))
 }
 
 func TestBrowserTitleAndScopePath(t *testing.T) {
