@@ -38,20 +38,30 @@ func (TablesDef) ChildScope(parent resource.Scope, row resource.Row) resource.Sc
 func (TablesDef) Actions() []resource.Action {
 	return []resource.Action{
 		{
-			Key:      "v",
-			Name:     "preview",
-			NeedsRow: true,
-			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {
-				return view.OpenSQLMsg{Query: previewQuery(scope, row.ID), Execute: true}
-			},
-		},
-		{
 			Key:      "x",
 			Name:     "query",
 			NeedsRow: true,
 			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {
 				return view.OpenSQLMsg{Query: previewQuery(scope, row.ID), Execute: false}
 			},
+		},
+	}
+}
+
+// EnterMsg implements resource.Opener: Enter opens the tabbed table view
+// (columns │ data │ details) instead of a plain child drill-down.
+func (TablesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
+	catalog, schema, table := scope["catalog"], scope["schema"], row.ID
+	return view.OpenTableMsg{
+		Title: table,
+		Scope: scope.Merge("table", table),
+		Query: previewQuery(scope, table),
+		Detail: func(ctx context.Context) (any, error) {
+			dao, err := c.Tables()
+			if err != nil {
+				return nil, err
+			}
+			return dao.Get(ctx, catalog, schema, table)
 		},
 	}
 }

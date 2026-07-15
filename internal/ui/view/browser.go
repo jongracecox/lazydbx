@@ -163,7 +163,9 @@ func (b *Browser) Hints() []key.Binding {
 		}
 	}
 	hints := []key.Binding{}
-	if b.def.Child() != "" {
+	if _, isOpener := b.def.(resource.Opener); isOpener {
+		hints = append(hints, key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")))
+	} else if b.def.Child() != "" {
 		hints = append(hints, key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", b.def.Child())))
 	}
 	hints = append(hints,
@@ -352,12 +354,17 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	return b, cmd
 }
 
-// drillDown pushes the child browser for the selected row, or falls back to
-// describe on leaf resources so Enter always does something.
+// drillDown pushes the child browser for the selected row; Opener defs emit
+// their own message instead (e.g. tables open the tabbed view), and leaves
+// fall back to describe so Enter always does something.
 func (b *Browser) drillDown() tea.Cmd {
 	row, ok := b.table.SelectedRow()
 	if !ok {
 		return nil
+	}
+	if opener, isOpener := b.def.(resource.Opener); isOpener {
+		clients, scope := b.clients, b.scope
+		return func() tea.Msg { return opener.EnterMsg(clients, scope, row) }
 	}
 	if b.def.Child() == "" {
 		return b.describe()

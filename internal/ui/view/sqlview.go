@@ -110,21 +110,32 @@ func NewSQLView(th theme.Theme, clients *dbx.Clients, sqlCfg config.SQLConfig, q
 	ta := textarea.New()
 	ta.SetValue(query)
 	ta.CursorEnd()
-	ta.Focus()
+	// Auto-exec previews start focused on the results (browsing, not
+	// editing) — otherwise typed keys like tab-switching would land in the
+	// query text. Ad-hoc editors start in the editor.
+	focus := focusEditor
+	if autoExec {
+		focus = focusResults
+	} else {
+		ta.Focus()
+	}
 	return &SQLView{
 		th:       th,
 		clients:  clients,
 		sqlCfg:   sqlCfg,
 		editor:   ta,
 		state:    stateIdle,
-		focus:    focusEditor,
+		focus:    focus,
 		autoExec: autoExec,
 	}
 }
 
-// Init focuses the editor and loads the warehouse list.
+// Init loads the warehouse list (and focuses the editor for ad-hoc use).
 func (v *SQLView) Init() tea.Cmd {
-	return tea.Batch(v.editor.Focus(), v.loadWarehouses())
+	if v.focus == focusEditor {
+		return tea.Batch(v.editor.Focus(), v.loadWarehouses())
+	}
+	return v.loadWarehouses()
 }
 
 // Close implements View.

@@ -105,6 +105,14 @@ type Tagger interface {
 	RowTags(row Row) []string
 }
 
+// Opener is optionally implemented by defs whose Enter opens a richer view
+// than the default child drill-down (e.g. tables open a tabbed detail).
+// EnterMsg returns the message the browser emits; it overrides Child().
+// Like Action.Run, it receives clients so it can bind fetch closures.
+type Opener interface {
+	EnterMsg(c *dbx.Clients, scope Scope, row Row) any
+}
+
 // Def is the interface every browsable resource implements.
 type Def interface {
 	// Name is the canonical command name, e.g. "tables".

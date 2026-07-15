@@ -164,6 +164,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.OpenLogMsg:
 		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
 
+	case view.OpenTableMsg:
+		tabs := []view.Tab{}
+		if columnsDef, ok := m.registry.Get("columns"); ok {
+			tabs = append(tabs, view.Tab{Name: "columns", View: m.newBrowser(columnsDef, msg.Scope, "")})
+		}
+		tabs = append(tabs,
+			view.Tab{Name: "data", View: view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, true)},
+			view.Tab{Name: "details", View: view.NewLazyDescribe(m.th, msg.Title, msg.Detail)},
+		)
+		return m.push(view.NewTabbed(m.th, msg.Title, tabs))
+
 	case view.ProfileSelectedMsg:
 		m.selectProfile(msg.Profile)
 		m.statusbar.Flash(component.FlashInfo, "profile: "+msg.Profile.Name, time.Now())
@@ -229,7 +240,38 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// Uppercase mode keys teleport to a root resource, resetting the stack
+	// (unlike ':' commands, which push and keep history).
+	if name, ok := modeKeys[msg.String()]; ok && m.clients != nil {
+		return m.switchMode(name)
+	}
+
 	return m.forward(msg)
+}
+
+// modeKeys are single-keystroke jumps between top-level resources. Uppercase
+// so they can't collide with j/k navigation or per-view verbs.
+var modeKeys = map[string]string{
+	"J": "jobs",
+	"C": "catalogs",
+	"P": "pipelines",
+	"A": "apps", // registered in a later phase; flashes until then
+}
+
+// switchMode resets the stack to picker + the named root browser.
+func (m Model) switchMode(name string) (tea.Model, tea.Cmd) {
+	def, ok := m.registry.Get(name)
+	if !ok {
+		m.statusbar.Flash(component.FlashWarn, name+" is not available yet", time.Now())
+		return m, nil
+	}
+	for i := 1; i < len(m.stack); i++ {
+		m.stack[i].Close()
+	}
+	m.stack = m.stack[:1]
+	b := m.newBrowser(def, resource.Scope{}, "")
+	m.stack = append(m.stack, b)
+	return m, b.Init()
 }
 
 // forward sends a message to the top view.
@@ -297,6 +339,7 @@ func (m Model) globalHints() []key.Binding {
 		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "profiles")),
+		key.NewBinding(key.WithKeys("J"), key.WithHelp("J/C/P", "jobs/catalogs/pipelines")),
 		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}
 }

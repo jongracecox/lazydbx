@@ -51,6 +51,16 @@ type OpenSQLMsg struct {
 	Execute bool
 }
 
+// OpenTableMsg asks the app to open the tabbed table view (columns │ data │
+// details) for one table. Query is the ready-to-run preview statement;
+// Detail lazily fetches the full table description.
+type OpenTableMsg struct {
+	Title  string
+	Scope  resource.Scope
+	Query  string
+	Detail func(ctx context.Context) (any, error)
+}
+
 // OpenLogMsg asks the app to open the log viewer on a text source. Fetch is
 // re-invoked while following, so it must be safe to call repeatedly. This is
 // how resource actions (task-run logs, pipeline events) launch the viewer

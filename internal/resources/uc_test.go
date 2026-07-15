@@ -92,26 +92,44 @@ func TestTablesDefListAndDescribe(t *testing.T) {
 		TablesDef{}.ChildScope(scope, rows[0]))
 }
 
-func TestTablesDefPreviewAction(t *testing.T) {
+func TestTablesDefQueryAction(t *testing.T) {
 	scope := resource.Scope{"catalog": "main", "schema": "silver"}
 	actions := TablesDef{}.Actions()
-	require.Len(t, actions, 2)
+	require.Len(t, actions, 1)
 
-	preview := actions[0]
-	assert.Equal(t, "v", preview.Key)
-	assert.True(t, preview.NeedsRow)
-	assert.False(t, preview.Dangerous)
-
-	msg := preview.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
+	query := actions[0]
+	assert.Equal(t, "x", query.Key)
+	assert.True(t, query.NeedsRow)
+	msg := query.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
 	open, ok := msg.(view.OpenSQLMsg)
 	require.True(t, ok)
 	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Query)
-	assert.True(t, open.Execute, "preview auto-executes")
+	assert.False(t, open.Execute, "query opens the editor without executing")
+}
 
-	query := actions[1]
-	assert.Equal(t, "x", query.Key)
-	msg = query.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
-	assert.False(t, msg.(view.OpenSQLMsg).Execute, "query opens the editor without executing")
+func TestTablesDefEnterOpensTabbedView(t *testing.T) {
+	var gotFull []string
+	c := dbx.NewClientsWithDAOs(dbx.Profile{Name: "test"}, dbx.DAOs{
+		Tables: fakeTablesDAO{
+			GetFn: func(_ context.Context, cat, sch, tbl string) (dbx.TableDetail, error) {
+				gotFull = []string{cat, sch, tbl}
+				return dbx.TableDetail{Table: dbx.Table{Name: tbl}}, nil
+			},
+		},
+	})
+	scope := resource.Scope{"catalog": "main", "schema": "silver"}
+
+	msg := TablesDef{}.EnterMsg(c, scope, resource.Row{ID: "events"})
+	open, ok := msg.(view.OpenTableMsg)
+	require.True(t, ok)
+	assert.Equal(t, "events", open.Title)
+	assert.Equal(t, resource.Scope{"catalog": "main", "schema": "silver", "table": "events"}, open.Scope)
+	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Query)
+
+	detail, err := open.Detail(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"main", "silver", "events"}, gotFull, "detail fetch binds the full path")
+	assert.Equal(t, "events", detail.(dbx.TableDetail).Name)
 }
 
 func TestColumnsDefList(t *testing.T) {
