@@ -280,12 +280,6 @@ func (m Model) View() tea.View {
 			badges = append(badges, "ACCOUNT")
 		}
 	}
-	// Show the drill-down path (catalog ▸ schema ▸ table) beside the profile.
-	if s, ok := m.top().(view.Scoped); ok {
-		if path := s.ScopePath(); path != "" {
-			context += "   " + m.th.KeyHint.Render(path)
-		}
-	}
 	if m.cfg.ReadOnly {
 		badges = append(badges, "READONLY")
 	}

@@ -63,8 +63,8 @@ func Header(th theme.Theme, width, height int, context string, badges []string, 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, bannerBlock)
 }
 
-// renderBanner styles the logo and tucks the app name + version into its
-// bottom-right corner.
+// renderBanner styles the logo and tucks the app name + version into the
+// bottom-right, one line above the base (beside the y descender).
 func renderBanner(th theme.Theme) string {
 	lines := strings.Split(banner, "\n")
 	bannerWidth := lipgloss.Width(banner)
@@ -74,11 +74,9 @@ func renderBanner(th theme.Theme) string {
 	for i, l := range lines {
 		out[i] = th.Logo.Render(l)
 	}
-	last := lines[len(lines)-1]
-	if pad := bannerWidth - lipgloss.Width(last) - lipgloss.Width(tag); pad >= 1 {
-		out[len(out)-1] = th.Logo.Render(last) + strings.Repeat(" ", pad) + th.Subtle.Render(tag)
-	} else {
-		out = append(out, lipgloss.PlaceHorizontal(bannerWidth, lipgloss.Right, th.Subtle.Render(tag)))
+	tagLine := len(lines) - 2
+	if pad := bannerWidth - lipgloss.Width(lines[tagLine]) - lipgloss.Width(tag); pad >= 1 {
+		out[tagLine] = th.Logo.Render(lines[tagLine]) + strings.Repeat(" ", pad) + th.Subtle.Render(tag)
 	}
 	return strings.Join(out, "\n")
 }

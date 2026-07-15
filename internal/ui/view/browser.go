@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -94,18 +93,6 @@ func (b *Browser) Title() string {
 		}
 	}
 	return b.def.Name()
-}
-
-// ScopePath renders the drill-down hierarchy for the header, e.g.
-// "dev_v2 ▸ 00_raw_accounts ▸ accounts".
-func (b *Browser) ScopePath() string {
-	var parts []string
-	for _, arg := range b.def.Args() {
-		if v := b.scope[arg]; v != "" {
-			parts = append(parts, v)
-		}
-	}
-	return strings.Join(parts, " ▸ ")
 }
 
 // Hints lists browser keys for the header. In sort mode the hints switch to

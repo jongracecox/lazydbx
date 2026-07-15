@@ -48,35 +48,30 @@ func TestBrowserTitleAndScopePath(t *testing.T) {
 		def       crumbDef
 		scope     resource.Scope
 		wantTitle string
-		wantPath  string
 	}{
 		{
 			name:      "root resource uses its name",
 			def:       crumbDef{name: "catalogs"},
 			scope:     resource.Scope{},
 			wantTitle: "catalogs",
-			wantPath:  "",
 		},
 		{
 			name:      "scoped view titled by selected item",
 			def:       crumbDef{name: "schemas", args: []string{"catalog"}},
 			scope:     resource.Scope{"catalog": "qsic_internal"},
 			wantTitle: "qsic_internal",
-			wantPath:  "qsic_internal",
 		},
 		{
-			name:      "deep scope shows full path",
+			name:      "deep scope titled by deepest item",
 			def:       crumbDef{name: "columns", args: []string{"catalog", "schema", "table"}},
 			scope:     resource.Scope{"catalog": "dev_v2", "schema": "20_gold", "table": "accounts"},
 			wantTitle: "accounts",
-			wantPath:  "dev_v2 ▸ 20_gold ▸ accounts",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := newTestBrowser(tt.def, tt.scope)
 			assert.Equal(t, tt.wantTitle, b.Title())
-			assert.Equal(t, tt.wantPath, b.ScopePath())
 		})
 	}
 }
