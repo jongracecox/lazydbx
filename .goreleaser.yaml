@@ -39,6 +39,7 @@ homebrew_casks:
   - repository:
       owner: jongracecox
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/jongracecox/lazydbx
     description: A lazier way to Databricks — a fast, colorful terminal UI
     license: Apache-2.0

@@ -22,6 +22,9 @@ jobs:
           version: "~> v2"
           args: release --clean
         env:
-          # Fine-grained PAT with write access to jongracecox/homebrew-tap;
-          # the default GITHUB_TOKEN cannot push to another repo.
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+          # Default token creates the GitHub Release on THIS repo; the
+          # fine-grained PAT (scoped to homebrew-tap only) is used solely by
+          # the homebrew_casks publisher — see repository.token in
+          # .goreleaser.yaml.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
