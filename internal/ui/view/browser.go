@@ -107,6 +107,13 @@ func (b *Browser) favKey() string {
 	return b.def.Name() + "|" + b.scope.Hash()
 }
 
+// CapturesKeys claims keyboard priority over global shortcuts while an
+// interactive mode is active: typing "prod" into the filter must not open
+// the profile picker, and popup/sort keys must not quit the app.
+func (b *Browser) CapturesKeys() bool {
+	return b.filtering || b.tagMode || b.table.InSortMode()
+}
+
 // Init subscribes to the engine; cached rows arrive synchronously.
 func (b *Browser) Init() tea.Cmd {
 	def, clients, scope := b.def, b.clients, b.scope
@@ -163,7 +170,7 @@ func (b *Browser) Hints() []key.Binding {
 		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "describe")),
 		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
 		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite")),
-		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl-r", "refresh")),
+		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	)
 	if _, ok := b.def.(resource.Tagger); ok {
 		hints = append(hints, key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "tags")))
@@ -302,7 +309,7 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			cmd := b.openTagPopup(tagger)
 			return b, cmd
 		}
-	case "ctrl+r":
+	case "r", "ctrl+r":
 		b.eng.RefreshNow(b.key)
 		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: "refreshing…"} }
 	case "L":

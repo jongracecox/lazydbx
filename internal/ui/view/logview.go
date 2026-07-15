@@ -112,7 +112,7 @@ func (v *LogView) Hints() []key.Binding {
 		key.NewBinding(key.WithKeys("w"), key.WithHelp("w", wrapHelp)),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match")),
-		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl-r", "refresh")),
+		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl-s", "save")),
 	}
 }
@@ -168,7 +168,7 @@ func (v *LogView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			v.xoff++
 		}
 		return v, nil
-	case "ctrl+r":
+	case "r", "ctrl+r":
 		cmd := v.fetchCmd()
 		return v, cmd
 	case "ctrl+s":

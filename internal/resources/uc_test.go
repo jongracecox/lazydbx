@@ -98,7 +98,7 @@ func TestTablesDefPreviewAction(t *testing.T) {
 	require.Len(t, actions, 2)
 
 	preview := actions[0]
-	assert.Equal(t, "p", preview.Key)
+	assert.Equal(t, "v", preview.Key)
 	assert.True(t, preview.NeedsRow)
 	assert.False(t, preview.Dangerous)
 

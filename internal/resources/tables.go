@@ -38,7 +38,7 @@ func (TablesDef) ChildScope(parent resource.Scope, row resource.Row) resource.Sc
 func (TablesDef) Actions() []resource.Action {
 	return []resource.Action{
 		{
-			Key:      "p",
+			Key:      "v",
 			Name:     "preview",
 			NeedsRow: true,
 			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {

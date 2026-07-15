@@ -218,7 +218,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if _, isHelp := m.top().(*view.Help); !isHelp {
 			return m.push(m.helpView())
 		}
-	case "ctrl+p":
+	case "p", "ctrl+p":
 		if _, isPicker := m.top().(*view.Picker); !isPicker {
 			return m.push(view.NewPicker(m.th, m.profiles))
 		}
@@ -296,7 +296,7 @@ func (m Model) globalHints() []key.Binding {
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl-p", "profiles")),
+		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "profiles")),
 		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}
 }
