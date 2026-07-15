@@ -12,7 +12,7 @@ var schemaCols = []resource.ColSpec[dbx.Schema]{
 	{Column: resource.Column{Title: "NAME"}, Extract: func(s dbx.Schema) string { return s.Name }},
 	{Column: resource.Column{Title: "OWNER", Width: 28}, Extract: func(s dbx.Schema) string { return s.Owner }},
 	{Column: resource.Column{Title: "UPDATED", Width: 18}, Extract: func(s dbx.Schema) string { return relTime(s.UpdatedAt) }},
-	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(s dbx.Schema) string { return s.Comment }},
+	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(s dbx.Schema) string { return dbx.OneLine(s.Comment) }},
 }
 
 // SchemasDef browses schemas within a catalog.

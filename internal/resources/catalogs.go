@@ -16,7 +16,7 @@ var catalogCols = []resource.ColSpec[dbx.Catalog]{
 	{Column: resource.Column{Title: "TYPE", Width: 18}, Extract: func(c dbx.Catalog) string { return c.Type }},
 	{Column: resource.Column{Title: "OWNER", Width: 28}, Extract: func(c dbx.Catalog) string { return c.Owner }},
 	{Column: resource.Column{Title: "UPDATED", Width: 18}, Extract: func(c dbx.Catalog) string { return relTime(c.UpdatedAt) }},
-	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(c dbx.Catalog) string { return c.Comment }},
+	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(c dbx.Catalog) string { return dbx.OneLine(c.Comment) }},
 }
 
 // CatalogsDef browses Unity Catalog catalogs.

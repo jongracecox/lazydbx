@@ -1,12 +1,9 @@
 package view
 
 import (
-	"fmt"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"gopkg.in/yaml.v3"
 
 	"github.com/jongracecox/lazydbx/internal/theme"
 )
@@ -20,13 +17,10 @@ type Describe struct {
 	ready bool
 }
 
-// NewDescribe marshals the object up front; marshal errors render inline.
+// NewDescribe renders the object up front via the YAML-ish detail renderer
+// (multi-line strings become readable indented blocks, keys are accented).
 func NewDescribe(th theme.Theme, title string, obj any) *Describe {
-	body, err := yaml.Marshal(obj)
-	if err != nil {
-		return &Describe{th: th, title: title, body: fmt.Sprintf("failed to render: %v", err)}
-	}
-	return &Describe{th: th, title: title, body: string(body)}
+	return &Describe{th: th, title: title, body: renderDetail(th, obj)}
 }
 
 // Init implements View.

@@ -19,7 +19,7 @@ var columnCols = []resource.ColSpec[dbx.TableColumn]{
 		}
 		return "no"
 	}},
-	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(c dbx.TableColumn) string { return c.Comment }},
+	{Column: resource.Column{Title: "COMMENT", Wide: true}, Extract: func(c dbx.TableColumn) string { return dbx.OneLine(c.Comment) }},
 }
 
 // ColumnsDef browses the columns of one table — the leaf of the Unity
