@@ -16,6 +16,7 @@ import (
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
 	"github.com/jongracecox/lazydbx/internal/favorites"
+	"github.com/jongracecox/lazydbx/internal/openurl"
 	"github.com/jongracecox/lazydbx/internal/resource"
 	"github.com/jongracecox/lazydbx/internal/theme"
 	"github.com/jongracecox/lazydbx/internal/ui/component"
@@ -161,6 +162,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.OpenSQLMsg:
 		return m.push(view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, msg.Execute))
 
+	case view.OpenURLMsg:
+		return m, openURLCmd(msg.URL)
+
 	case view.OpenLogMsg:
 		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
 
@@ -198,6 +202,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.forward(msg)
+}
+
+// openURLCmd launches the system browser for url without blocking the TUI.
+// It starts (not runs) the opener so we never wait on the browser process,
+// and flashes the outcome.
+func openURLCmd(url string) tea.Cmd {
+	return func() tea.Msg {
+		if err := openurl.Command(url).Start(); err != nil {
+			return view.FlashMsg{Level: view.FlashError, Text: "open browser: " + err.Error()}
+		}
+		return view.FlashMsg{Level: view.FlashInfo, Text: "opening " + url}
+	}
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

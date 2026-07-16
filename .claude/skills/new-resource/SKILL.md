@@ -32,6 +32,15 @@ Follow an existing def (e.g. `catalogs.go`) exactly:
   (rate limit ≈4 req/s); consult `docs/PLAN.md` rate-limit table.
 - Actions: mutating ones MUST set `Dangerous: true`.
 - Never call `GetSecret` — secrets are metadata-only by policy.
+- If the resource has a page in the Databricks workspace UI, implement
+  `resource.WebLinker` so `o` opens it in the browser. Add a `WebURL` method
+  in `internal/resources/weburl.go` (keep all the URL builders together) using
+  the shared `webURL(host, segments...)` helper — it escapes each segment and
+  returns `ok=false` when the host or any segment is empty. Build the path from
+  `scope` + `row.ID` (e.g. `webURL(host, "explore", "data", scope["catalog"],
+  row.ID)`). Leaves with no page of their own can point at their parent's page
+  (see `ColumnsDef`/`TaskRunsDef`). Skip this only for resources with no
+  workspace URL at all.
 
 ## 3. Registration (`internal/resources/register.go`)
 
@@ -43,7 +52,8 @@ One line: `reg.MustRegister(NewXxxDef(...))` with name + aliases
 Table-driven with testify. Fake DAO = struct of func fields (do NOT use the
 SDK's experimental mocks). Assert: row IDs and cells from canned SDK structs,
 `ChildScope` composition, alias resolution, readonly gating of dangerous
-actions.
+actions. If you added `WebURL`, add a case to `weburl_test.go` (expected URL
+plus a not-linkable case with an empty host or missing scope segment).
 
 ## Verify
 
