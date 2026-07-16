@@ -184,6 +184,10 @@ func (t *Table) reflow() {
 		}
 		bcols[i] = btable.Column{Title: t.decorateTitle(c.Title, t.visIdx[i], i), Width: w}
 	}
+	// The selected row is rendered by bubbles with a whole-row Reverse style;
+	// per-cell styling embeds ANSI reset codes that would truncate that
+	// highlight partway across the row, so leave the cursor row's cells plain.
+	cur := t.tbl.Cursor()
 	brows := make([]btable.Row, len(t.rows))
 	for i, r := range t.rows {
 		cells := make([]string, len(t.visIdx))
@@ -193,7 +197,7 @@ func (t *Table) reflow() {
 				val = r.Cells[src]
 			}
 			// Style at render time only; src is the original column index.
-			if t.cellStyler != nil {
+			if t.cellStyler != nil && i != cur {
 				if st, ok := t.classStyle(t.cellStyler(src, val)); ok {
 					val = st.Render(val)
 				}
@@ -203,8 +207,7 @@ func (t *Table) reflow() {
 		brows[i] = cells
 	}
 	// Clearing rows while the column count changes avoids ragged data, but
-	// it also clamps the bubbles cursor to -1 — so capture and restore it.
-	cur := t.tbl.Cursor()
+	// it also clamps the bubbles cursor to -1 — so restore it.
 	t.tbl.SetRows(nil)
 	t.tbl.SetColumns(bcols)
 	t.tbl.SetRows(brows)
@@ -251,7 +254,14 @@ func (t Table) Update(msg tea.Msg) (Table, tea.Cmd) {
 		}
 	}
 	var cmd tea.Cmd
+	before := t.tbl.Cursor()
 	t.tbl, cmd = t.tbl.Update(msg)
+	// The cursor row is rendered without per-cell styling so its whole-row
+	// highlight isn't broken by embedded ANSI resets; when the cursor moves,
+	// re-flow so the row it left regains its styling and the new one drops it.
+	if t.cellStyler != nil && t.tbl.Cursor() != before {
+		t.reflow()
+	}
 	return t, cmd
 }
 
