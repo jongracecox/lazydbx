@@ -145,9 +145,12 @@ func TestCellStylerColorsCellsButKeepsRawCells(t *testing.T) {
 	th := theme.Default()
 	tbl := styledTable(t)
 
+	// Row 0 (FAILED) is under the cursor: its cells are left unstyled so the
+	// whole-row selection highlight isn't truncated by embedded ANSI resets.
+	// Row 1 (SUCCESS) is not selected, so it keeps its semantic color.
 	view := tbl.View()
-	assert.Contains(t, view, ansiPrefix(t, th.Success.Render("x")), "SUCCESS cell rendered with success color")
-	assert.Contains(t, view, ansiPrefix(t, th.Error.Render("x")), "FAILED cell rendered with error color")
+	assert.Contains(t, view, ansiPrefix(t, th.Success.Render("x")), "unselected SUCCESS cell rendered with success color")
+	assert.NotContains(t, view, ansiPrefix(t, th.Error.Render("x")), "selected FAILED cell left unstyled for full-row highlight")
 
 	// Raw cells accessed for filter/sort must remain unstyled.
 	for _, r := range tbl.rows {
@@ -155,6 +158,33 @@ func TestCellStylerColorsCellsButKeepsRawCells(t *testing.T) {
 			assert.NotContains(t, c, "\x1b[", "raw cell %q must stay unstyled", c)
 		}
 	}
+}
+
+// TestSelectedRowHighlightSpansStyledRow guards the fix for a favorited (or
+// otherwise styled) row whose whole-row highlight was truncated at the first
+// styled cell by that cell's embedded ANSI reset.
+func TestSelectedRowHighlightSpansStyledRow(t *testing.T) {
+	tbl := styledTable(t) // cursor starts on row 0 (FAILED)
+
+	view := tbl.View()
+	// The selected row is one unbroken Reverse span: exactly one reset closes
+	// it, with no reset mid-row that would leave later cells un-highlighted.
+	selRow := selectedLine(t, view)
+	assert.Equalf(t, 1, strings.Count(selRow, "\x1b[m"),
+		"selected row should have a single trailing reset, got %q", selRow)
+}
+
+// selectedLine returns the rendered line carrying the Reverse (\x1b[...7...m)
+// selection style.
+func selectedLine(t *testing.T, view string) string {
+	t.Helper()
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "7m") && strings.Contains(line, "\x1b[") {
+			return line
+		}
+	}
+	t.Fatalf("no selected (reverse) row found in view:\n%s", view)
+	return ""
 }
 
 func TestCellStylerSortingOperatesOnRawValues(t *testing.T) {
