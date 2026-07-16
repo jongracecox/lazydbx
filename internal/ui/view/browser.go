@@ -177,6 +177,9 @@ func (b *Browser) Hints() []key.Binding {
 	if _, ok := b.def.(resource.Tagger); ok {
 		hints = append(hints, key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "tags")))
 	}
+	if _, ok := b.def.(resource.WebLinker); ok {
+		hints = append(hints, key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")))
+	}
 	for _, a := range b.def.Actions() {
 		hints = append(hints, key.NewBinding(key.WithKeys(a.Key), key.WithHelp(a.Key, a.Name)))
 	}
@@ -334,6 +337,11 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			text = "favorited " + row.ID
 		}
 		return b, func() tea.Msg { return FlashMsg{Level: FlashInfo, Text: text} }
+	case "o":
+		if linker, ok := b.def.(resource.WebLinker); ok {
+			cmd := b.openWeb(linker)
+			return b, cmd
+		}
 	case "enter":
 		cmd := b.drillDown()
 		return b, cmd
@@ -375,6 +383,20 @@ func (b *Browser) drillDown() tea.Cmd {
 			Scope:    b.def.ChildScope(b.scope, row),
 		}
 	}
+}
+
+// openWeb builds the selected row's workspace URL and asks the app to open it
+// in the system browser.
+func (b *Browser) openWeb(linker resource.WebLinker) tea.Cmd {
+	row, ok := b.table.SelectedRow()
+	if !ok {
+		return nil
+	}
+	url, ok := linker.WebURL(b.clients.Profile().Host, b.scope, row)
+	if !ok {
+		return func() tea.Msg { return FlashMsg{Level: FlashWarn, Text: "no web link for this item"} }
+	}
+	return func() tea.Msg { return OpenURLMsg{URL: url} }
 }
 
 // describe loads the detail object and pushes a describe view.

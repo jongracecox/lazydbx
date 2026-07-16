@@ -113,6 +113,15 @@ type Opener interface {
 	EnterMsg(c *dbx.Clients, scope Scope, row Row) any
 }
 
+// WebLinker is optionally implemented by defs whose rows map to a page in the
+// Databricks workspace web UI. The browser binds `o` to open that page in the
+// system browser. host is the workspace base URL (e.g.
+// "https://xxx.cloud.databricks.com", no trailing slash); ok is false when the
+// row has no stable web location (e.g. host unknown).
+type WebLinker interface {
+	WebURL(host string, scope Scope, row Row) (url string, ok bool)
+}
+
 // Def is the interface every browsable resource implements.
 type Def interface {
 	// Name is the canonical command name, e.g. "tables".

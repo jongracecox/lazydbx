@@ -64,7 +64,7 @@ Dependency direction: `cmd → app → ui/view → resource ← resources → db
 - Bubble Tea v2 import paths are `charm.land/...` (vanity), not `github.com/charmbracelet/...`.
 - v2 API: `View() tea.View` (set `v.AltScreen = true` in the view, not a program option); `lipgloss.Color(...)` is a constructor returning `color.Color`, not a type; keys match via `tea.KeyPressMsg.String()` (e.g. `"ctrl+r"`).
 - `ctrl+c` is reserved for quit (with confirm when work is in flight). SQL execute = `ctrl+e`, cancel = `ctrl+k`.
-- Reserved single keys (do not bind in def Actions): global `q p ? : J C P A`, browser `d s f t r j k / [ ]` (j/k = navigation, [/] = tab switching). Check `?` help for the live map.
+- Reserved single keys (do not bind in def Actions): global `q p ? : J C P A`, browser `d s f t r j k o / [ ]` (j/k = navigation, [/] = tab switching, `o` = open in browser, shown only when the def implements `resource.WebLinker`). Check `?` help for the live map.
 - teatest goldens: pin terminal size and color profile in `TestMain`, inject the clock for "Ns ago" badges; `.gitattributes` marks `*.golden -text`.
 - Rate limits: workspace SCIM ≈4 req/s (identity resources use 15m poll + manual refresh), jobs list 20/s. Respect per-resource `PollInterval()`.
 - `~/.databrickscfg` may contain non-profile sections like `[__settings__]` — the profile parser must skip them.

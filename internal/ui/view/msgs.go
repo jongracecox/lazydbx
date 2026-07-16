@@ -92,6 +92,11 @@ type OpenTabsMsg struct {
 	Tabs  []TabSpec
 }
 
+// OpenURLMsg asks the app to open a URL in the system web browser — how
+// resources link out to their page in the Databricks workspace UI. The app
+// shells out to the OS opener; the TUI stays up.
+type OpenURLMsg struct{ URL string }
+
 // OpenLogMsg asks the app to open the log viewer on a text source. Fetch is
 // re-invoked while following, so it must be safe to call repeatedly. This is
 // how resource actions (task-run logs, pipeline events) launch the viewer
