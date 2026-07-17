@@ -19,7 +19,15 @@ make tidy           # go mod tidy -diff (check only)
 make tools          # install golangci-lint + lefthook, register hooks
 go test ./internal/app -update   # regenerate golden files
 go run ./cmd/lazydbx --profile <name>   # run against a profile
+go run ./cmd/lazydbx -p <name> tables main.silver   # launch into a resource
 ```
+
+Positional launch args (`lazydbx [flags] [resource [args...] [/filter]]`) reuse
+the `:` command grammar via `registry.Parse`; the parsed command replaces the
+default browser above the picker on the first profile selection (`esc` → picker).
+Validation lives in `validateLaunch` (cmd, pre-TUI stderr errors) mirrored by
+`app.launchView` (in-app fallback). Root uses `cobra.ArbitraryArgs` so args fall
+through to `RunE` while `version` still routes as a subcommand.
 
 Logs go to `$XDG_STATE_HOME/lazydbx/lazydbx.log` (macOS: `~/Library/Application Support/lazydbx/`).
 Never print to stdout/stderr while the TUI runs.

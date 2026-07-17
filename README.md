@@ -41,6 +41,18 @@ lazydbx --profile mydev    # jump straight into a profile
 lazydbx --readonly         # disable all mutating actions
 ```
 
+Optional positional args launch straight into a resource view, using the same
+syntax as the in-app `:` command bar. `esc` from a launched view returns to the
+profile picker.
+
+```bash
+lazydbx -p mydev jobs                 # open in the jobs list
+lazydbx -p mydev schemas prod         # schemas in the 'prod' catalog
+lazydbx -p mydev tables main.silver   # drill straight to a schema's tables
+lazydbx -p mydev runs 123             # runs for job 123
+lazydbx -p mydev jobs /etl            # jobs list pre-filtered to 'etl'
+```
+
 ## Development
 
 ```bash

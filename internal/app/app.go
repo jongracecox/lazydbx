@@ -50,11 +50,18 @@ type Model struct {
 	cmdOpen   bool
 	statusbar component.StatusBar
 
+	// launch is an optional CLI command (e.g. "tables main.silver") applied to
+	// the first profile selection in place of the default resource; consumed
+	// after use so later profile switches open the default view.
+	launch string
+
 	width, height int
 }
 
 // New builds the root model. When cfg.Profile is set the picker is skipped.
-func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry, pool *dbx.Pool, eng *engine.Engine) Model {
+// launch is an optional command (same syntax as the ':' bar) opened in place
+// of the default resource on the first profile selection; "" opens the default.
+func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry, pool *dbx.Pool, eng *engine.Engine, launch string) Model {
 	m := Model{
 		cfg:      cfg,
 		th:       theme.Default(),
@@ -64,6 +71,7 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 		profiles: profiles,
 		favs:     favorites.NewDefault(),
 		cmdbar:   component.NewCmdBar(completer(registry)),
+		launch:   strings.TrimSpace(launch),
 	}
 
 	if cfg.Profile != "" {
@@ -90,9 +98,33 @@ func (m *Model) selectProfile(p dbx.Profile) {
 		v.Close()
 	}
 	m.stack = []view.View{view.NewPicker(m.th, m.profiles)}
-	if def, ok := m.registry.Get(defaultResource); ok {
+	if v, ok := m.launchView(); ok {
+		m.stack = append(m.stack, v)
+	} else if def, ok := m.registry.Get(defaultResource); ok {
 		m.stack = append(m.stack, m.newBrowser(def, resource.Scope{}, ""))
 	}
+}
+
+// launchView builds the initial view from the CLI launch command, mirroring
+// exec's routing. It consumes m.launch so it only ever affects the first
+// profile selection; a parse error flashes and falls back to the default view.
+// Keep in sync with validateLaunch in cmd/lazydbx (which pre-checks at startup).
+func (m *Model) launchView() (view.View, bool) {
+	input := m.launch
+	m.launch = ""
+	if input == "" {
+		return nil, false
+	}
+	if input == "sql" || strings.HasPrefix(input, "sql ") {
+		query := strings.TrimSpace(strings.TrimPrefix(input, "sql"))
+		return view.NewSQLView(m.th, m.clients, m.cfg.SQL, query, false), true
+	}
+	cmd, err := m.registry.Parse(input)
+	if err != nil {
+		m.statusbar.Flash(component.FlashError, err.Error(), time.Now())
+		return nil, false
+	}
+	return m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter), true
 }
 
 // completer feeds the command bar: an empty prompt lists every canonical
