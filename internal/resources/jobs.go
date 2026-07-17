@@ -21,8 +21,22 @@ var jobCols = []resource.ColSpec[dbx.Job]{
 	{Column: resource.Column{Title: "CREATED", Width: 12, Wide: true}, Extract: func(j dbx.Job) string { return relTime(j.CreatedAt) }},
 }
 
-// jobStatusCol is the index of the STATUS column, colored via stateClass.
-const jobStatusCol = 3
+// Column indices: STATUS is colored via stateClass; NAME is the human handle
+// used for CLI completion and launch selection (Row.ID is the numeric job id).
+const (
+	jobNameCol   = 1
+	jobStatusCol = 3
+)
+
+// RowName implements resource.RowNamer: jobs are addressed by name on the CLI
+// even though their Row.ID is the numeric id. Reads the NAME cell so it works
+// on cache-restored rows too; falls back to the id when the cell is absent.
+func (JobsDef) RowName(row resource.Row) string {
+	if len(row.Cells) > jobNameCol {
+		return row.Cells[jobNameCol]
+	}
+	return row.ID
+}
 
 // lastStatus prefers the terminal result (SUCCESS/FAILED); an in-flight run
 // shows its lifecycle state instead.

@@ -21,7 +21,18 @@ func newTestTabbed(t *testing.T) *Tabbed {
 		{Name: "one", View: NewDescribe(th, "one", map[string]string{"payload": "body-one"})},
 		{Name: "two", View: NewDescribe(th, "two", map[string]string{"payload": "body-two"})},
 		{Name: "three", View: NewDescribe(th, "three", map[string]string{"payload": "body-three"})},
-	})
+	}, 0)
+}
+
+func TestTabbedInitialActive(t *testing.T) {
+	th := theme.Default()
+	tabs := []Tab{
+		{Name: "one", View: NewDescribe(th, "one", map[string]string{"payload": "body-one"})},
+		{Name: "two", View: NewDescribe(th, "two", map[string]string{"payload": "body-two"})},
+	}
+	assert.Contains(t, NewTabbed(th, "t", tabs, 1).Render(80, 20), "body-two", "opens the requested tab")
+	assert.Contains(t, NewTabbed(th, "t", tabs, 9).Render(80, 20), "body-one", "out-of-range clamps to first")
+	assert.Contains(t, NewTabbed(th, "t", tabs, -1).Render(80, 20), "body-one", "negative clamps to first")
 }
 
 func TestTabbedSwitching(t *testing.T) {

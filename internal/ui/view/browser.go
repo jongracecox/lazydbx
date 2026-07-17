@@ -58,9 +58,11 @@ type Browser struct {
 
 	// autoOpenID, when set, makes the browser open the row with this ID once
 	// data arrives — how a CLI launch like `apps <name>` lands directly on the
-	// item instead of the list. Fires at most once (autoOpened).
-	autoOpenID string
-	autoOpened bool
+	// item instead of the list. Fires at most once (autoOpened). autoOpenTab,
+	// when set, selects the tab the opened item lands on (CLI `--tab`).
+	autoOpenID  string
+	autoOpenTab string
+	autoOpened  bool
 
 	width, height int
 }
@@ -409,8 +411,38 @@ func (b *Browser) enterRow(row resource.Row) tea.Cmd {
 	}
 }
 
-// SetAutoOpen makes the browser open the row with id once data arrives.
-func (b *Browser) SetAutoOpen(id string) { b.autoOpenID = id }
+// enterRowTab opens a row like enterRow but, when tab is set and the row opens
+// a tabbed view, pre-selects the tab whose name matches (case-insensitive).
+// A non-matching tab falls through to the default first tab; pre-TUI
+// validation in cmd/lazydbx normally rejects a bad name before launch.
+func (b *Browser) enterRowTab(row resource.Row, tab string) tea.Cmd {
+	base := b.enterRow(row)
+	if tab == "" || base == nil {
+		return base
+	}
+	return func() tea.Msg {
+		msg := base()
+		open, ok := msg.(OpenTabsMsg)
+		if !ok {
+			return msg
+		}
+		for i, t := range open.Tabs {
+			if strings.EqualFold(t.Name, tab) {
+				open.Active = i
+				break
+			}
+		}
+		return open
+	}
+}
+
+// SetAutoOpen makes the browser open the row with id once data arrives. tab,
+// when non-empty, selects which tab the opened item lands on (matched by name
+// against the item's tabs); "" opens the item's default first tab.
+func (b *Browser) SetAutoOpen(id, tab string) {
+	b.autoOpenID = id
+	b.autoOpenTab = tab
+}
 
 // maybeAutoOpen fires the one-shot auto-open once the target row has loaded.
 // It waits through empty/cache loads; once rows are present without the target,
@@ -419,10 +451,11 @@ func (b *Browser) maybeAutoOpen() tea.Cmd {
 	if b.autoOpened || b.autoOpenID == "" || !b.loaded {
 		return nil
 	}
+	namer, _ := b.def.(resource.RowNamer)
 	for _, r := range b.allRows {
-		if r.ID == b.autoOpenID {
+		if r.ID == b.autoOpenID || (namer != nil && namer.RowName(r) == b.autoOpenID) {
 			b.autoOpened = true
-			return b.enterRow(r)
+			return b.enterRowTab(r, b.autoOpenTab)
 		}
 	}
 	if len(b.allRows) > 0 {

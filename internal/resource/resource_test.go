@@ -83,6 +83,7 @@ func TestRegistryParse(t *testing.T) {
 		wantDef string
 		want    Scope
 		filter  string
+		item    string
 		wantErr string
 	}{
 		{name: "unscoped", input: "catalogs", wantDef: "catalogs", want: Scope{}},
@@ -91,8 +92,13 @@ func TestRegistryParse(t *testing.T) {
 		{name: "dotted sugar", input: "tables main.silver", wantDef: "tables", want: Scope{"catalog": "main", "schema": "silver"}},
 		{name: "trailing filter", input: "tables main silver /events", wantDef: "tables", want: Scope{"catalog": "main", "schema": "silver"}, filter: "events"},
 		{name: "filter on unscoped", input: "catalogs /prod", wantDef: "catalogs", want: Scope{}, filter: "prod"},
+		{name: "item on unscoped", input: "catalogs prod", wantDef: "catalogs", want: Scope{}, item: "prod"},
+		{name: "item after scope", input: "tables main silver orders", wantDef: "tables", want: Scope{"catalog": "main", "schema": "silver"}, item: "orders"},
+		{name: "dotted scope plus item", input: "tables main.silver orders", wantDef: "tables", want: Scope{"catalog": "main", "schema": "silver"}, item: "orders"},
+		{name: "item and filter", input: "tables main silver orders /x", wantDef: "tables", want: Scope{"catalog": "main", "schema": "silver"}, item: "orders", filter: "x"},
 		{name: "missing args", input: "tables main", wantErr: "requires schema"},
-		{name: "too many args", input: "catalogs extra", wantErr: "at most 0"},
+		{name: "two items unscoped", input: "catalogs a b", wantErr: "at most one item"},
+		{name: "two items scoped", input: "tables main silver a b", wantErr: "and at most one item"},
 		{name: "unknown resource", input: "bogus", wantErr: `unknown resource "bogus"`},
 		{name: "empty", input: "  ", wantErr: "empty command"},
 	}
@@ -108,6 +114,7 @@ func TestRegistryParse(t *testing.T) {
 			assert.Equal(t, tt.wantDef, cmd.Def.Name())
 			assert.Equal(t, tt.want, cmd.Scope)
 			assert.Equal(t, tt.filter, cmd.Filter)
+			assert.Equal(t, tt.item, cmd.Item)
 		})
 	}
 }

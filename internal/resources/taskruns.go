@@ -72,6 +72,9 @@ func (TaskRunsDef) Actions() []resource.Action {
 	}
 }
 
+// Tabs implements resource.Tabber: the tab names EnterMsg produces, in order.
+func (TaskRunsDef) Tabs() []string { return []string{"logs", "details"} }
+
 // EnterMsg implements resource.Opener: selecting a task run opens tabs —
 // its logs beside its metadata — instead of bare describe.
 func (TaskRunsDef) EnterMsg(c *dbx.Clients, _ resource.Scope, row resource.Row) any {

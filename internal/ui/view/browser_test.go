@@ -57,9 +57,66 @@ func (openerDef) EnterMsg(_ *dbx.Clients, _ resource.Scope, row resource.Row) an
 	return openedMsg{id: row.ID}
 }
 
+// tabsOpenerDef is a stub Opener whose Enter opens a tabbed view, for testing
+// launch tab selection.
+type tabsOpenerDef struct{ crumbDef }
+
+func (tabsOpenerDef) EnterMsg(_ *dbx.Clients, _ resource.Scope, row resource.Row) any {
+	return OpenTabsMsg{
+		Title: row.ID,
+		Tabs:  []TabSpec{{Name: "details"}, {Name: "logs"}},
+	}
+}
+
+// namedOpenerDef opens tabs and addresses rows by a name in Cells[0] distinct
+// from Row.ID — like jobs (numeric id, human name).
+type namedOpenerDef struct{ tabsOpenerDef }
+
+func (namedOpenerDef) RowName(row resource.Row) string {
+	if len(row.Cells) > 0 {
+		return row.Cells[0]
+	}
+	return row.ID
+}
+
+func TestBrowserAutoOpenByName(t *testing.T) {
+	b := newTestBrowser(namedOpenerDef{tabsOpenerDef{crumbDef{name: "jobs", cols: []resource.Column{{Title: "NAME"}}}}}, resource.Scope{})
+	b.SetAutoOpen("Nightly ETL", "")
+
+	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "42", Cells: []string{"Nightly ETL"}},
+	}})
+	require.NotNil(t, cmd, "matches the human name even though Row.ID is the numeric id")
+	open, ok := cmd().(OpenTabsMsg)
+	require.True(t, ok)
+	assert.Equal(t, "42", open.Title, "opens the row whose name matched")
+}
+
+func TestBrowserAutoOpenTab(t *testing.T) {
+	b := newTestBrowser(tabsOpenerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
+	b.SetAutoOpen("beta", "logs")
+
+	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "beta", Cells: []string{"beta"}}}})
+	require.NotNil(t, cmd)
+	open, ok := cmd().(OpenTabsMsg)
+	require.True(t, ok)
+	assert.Equal(t, 1, open.Active, "lands on the named tab")
+}
+
+func TestBrowserAutoOpenUnknownTabDefaultsFirst(t *testing.T) {
+	b := newTestBrowser(tabsOpenerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
+	b.SetAutoOpen("beta", "nope")
+
+	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "beta", Cells: []string{"beta"}}}})
+	require.NotNil(t, cmd)
+	open, ok := cmd().(OpenTabsMsg)
+	require.True(t, ok)
+	assert.Equal(t, 0, open.Active, "unknown tab falls back to the first tab")
+}
+
 func TestBrowserAutoOpen(t *testing.T) {
 	b := newTestBrowser(openerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
-	b.SetAutoOpen("beta")
+	b.SetAutoOpen("beta", "")
 
 	// A cache/empty load must not fire or give up.
 	_, cmd := b.Update(engine.DataEvent{Key: b.key})
@@ -81,7 +138,7 @@ func TestBrowserAutoOpen(t *testing.T) {
 
 func TestBrowserAutoOpenNotFound(t *testing.T) {
 	b := newTestBrowser(openerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
-	b.SetAutoOpen("ghost")
+	b.SetAutoOpen("ghost", "")
 
 	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "real", Cells: []string{"real"}}}})
 	require.NotNil(t, cmd, "gives up with a flash when the target is absent")
