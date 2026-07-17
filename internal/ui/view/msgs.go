@@ -111,6 +111,10 @@ type SQLTabSpec struct {
 type OpenTabsMsg struct {
 	Title string
 	Tabs  []TabSpec
+	// Active selects the initially shown tab (0-based); 0 (the zero value)
+	// opens the first tab. The browser sets it when a CLI `--tab` launch asks
+	// to land on a specific tab; normal Enter leaves it zero.
+	Active int
 }
 
 // OpenURLMsg asks the app to open a URL in the system web browser — how

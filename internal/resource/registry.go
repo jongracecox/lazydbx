@@ -93,21 +93,36 @@ func (r *Registry) Summaries() []string {
 
 // Command is a parsed `:` command line.
 type Command struct {
-	Def    Def
-	Scope  Scope
-	Filter string // pre-seeded filter from a trailing /text
+	Def   Def
+	Scope Scope
+	// Filter pre-seeds a substring filter on the list, from a trailing /text.
+	Filter string
+	// Item is a positional item selector beyond the scope args — the exact
+	// name (or ID) of a single row to open directly, e.g. the "orders" in
+	// `tables main silver orders` or the "my-app" in `apps my-app`.
+	Item string
 }
 
-// Parse interprets a command line like:
-//
-//	tables main silver
-//	tables main.silver
-//	tables main silver /events
-//
-// Positional args map onto Def.Args(); a single dotted arg is sugar for the
-// full positional list; a trailing /text pre-seeds the view filter.
+// Parse interprets a command string; see ParseArgs for the grammar. Fields are
+// split on whitespace — callers with already-tokenized args (which preserve
+// quoted names containing spaces) should use ParseArgs directly.
 func (r *Registry) Parse(input string) (Command, error) {
-	fields := strings.Fields(strings.TrimSpace(input))
+	return r.ParseArgs(strings.Fields(strings.TrimSpace(input)))
+}
+
+// ParseArgs interprets pre-tokenized command args like:
+//
+//	tables main silver           # list a schema's tables
+//	tables main.silver           # dotted sugar for the scope
+//	tables main silver orders    # open the 'orders' table directly
+//	tables main silver /events   # list, pre-filtered to 'events'
+//	apps my-app                  # open 'my-app' directly
+//
+// The first field names the resource. Following positionals map onto
+// Def.Args(); a leading dotted arg is sugar for the scope list. One positional
+// beyond the scope args is the Item selector (the row to open). A trailing
+// /text pre-seeds the list filter instead.
+func (r *Registry) ParseArgs(fields []string) (Command, error) {
 	if len(fields) == 0 {
 		return Command{}, fmt.Errorf("empty command")
 	}
@@ -125,12 +140,10 @@ func (r *Registry) Parse(input string) (Command, error) {
 	}
 
 	want := def.Args()
-	// Dotted sugar: `tables main.silver` ≡ `tables main silver`.
-	if len(args) == 1 && len(want) > 1 && strings.Contains(args[0], ".") {
-		args = strings.Split(args[0], ".")
-	}
-	if len(args) > len(want) {
-		return Command{}, fmt.Errorf("%s takes at most %d args (%s)", def.Name(), len(want), strings.Join(want, " "))
+	// Dotted sugar: split a leading `main.silver` into scope parts. Applied
+	// even when an item follows, so `tables main.silver orders` works too.
+	if len(args) >= 1 && len(want) > 1 && strings.Contains(args[0], ".") {
+		args = append(strings.Split(args[0], "."), args[1:]...)
 	}
 	if len(args) < len(want) {
 		missing := want[len(args):]
@@ -138,10 +151,22 @@ func (r *Registry) Parse(input string) (Command, error) {
 	}
 
 	scope := Scope{}
-	for i, arg := range args {
-		scope[want[i]] = arg
+	for i, key := range want {
+		scope[key] = args[i]
 	}
-	return Command{Def: def, Scope: scope, Filter: filter}, nil
+
+	extra := args[len(want):]
+	if len(extra) > 1 {
+		if len(want) == 0 {
+			return Command{}, fmt.Errorf("%s takes at most one item name", def.Name())
+		}
+		return Command{}, fmt.Errorf("%s takes %s and at most one item name", def.Name(), strings.Join(want, " "))
+	}
+	var item string
+	if len(extra) == 1 {
+		item = extra[0]
+	}
+	return Command{Def: def, Scope: scope, Filter: filter, Item: item}, nil
 }
 
 // Complete returns registered names with the given prefix, for autocomplete.

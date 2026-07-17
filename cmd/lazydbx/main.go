@@ -32,9 +32,14 @@ func main() {
 
 func rootCmd() *cobra.Command {
 	var flags config.Flags
+	var launchTab string
+
+	// Built once and shared with completion, which resolves resource/scope
+	// names without starting the TUI.
+	registry := resources.NewRegistry()
 
 	root := &cobra.Command{
-		Use:   "lazydbx [resource [args...]] [/filter]",
+		Use:   "lazydbx [resource [args...]] [item] [/filter]",
 		Short: "A lazier way to Databricks — a fast terminal UI",
 		Long: "A lazier way to Databricks — a fast terminal UI.\n\n" +
 			"Optional positional args launch straight into a resource view, using the\n" +
@@ -42,14 +47,23 @@ func rootCmd() *cobra.Command {
 			"  lazydbx -p DEV jobs                 # open in the jobs list\n" +
 			"  lazydbx -p DEV schemas prod         # schemas in the 'prod' catalog\n" +
 			"  lazydbx -p DEV tables main.silver   # drill straight to a schema's tables\n" +
-			"  lazydbx -p DEV runs 123             # runs for job 123\n" +
 			"  lazydbx -p DEV jobs /etl            # jobs list pre-filtered to 'etl'\n\n" +
-			"esc from a launched view returns to the profile picker.",
+			"A trailing item name opens that item directly (jobs match by name):\n\n" +
+			"  lazydbx -p DEV apps my-app                    # open the app 'my-app'\n" +
+			"  lazydbx -p DEV jobs 'Nightly ETL'             # open a job by name\n" +
+			"  lazydbx -p DEV tables main.silver orders      # open the 'orders' table\n\n" +
+			"--tab opens a specific tab of such an item:\n\n" +
+			"  lazydbx -p DEV apps my-app --tab logs         # app, on its logs tab\n" +
+			"  lazydbx -p DEV tables main.silver orders --tab data  # table, on its data tab\n\n" +
+			"esc from a launched view returns to the profile picker.\n\n" +
+			"Shell completion (resource, scope, and item names — the latter live from\n" +
+			"the workspace when -p is given) is available via `lazydbx completion`.",
 		// ArbitraryArgs lets positional launch args fall through to RunE while
 		// still routing `lazydbx version` to its subcommand.
-		Args:          cobra.ArbitraryArgs,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Args:              cobra.ArbitraryArgs,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		ValidArgsFunction: completeArgs(registry),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(flags)
 			if err != nil {
@@ -62,7 +76,7 @@ func rootCmd() *cobra.Command {
 			defer closeLog() //nolint:errcheck // best-effort close on exit
 			slog.Info("starting", "version", version.Version, "log", logPath)
 
-			return run(cmd, cfg, strings.Join(args, " "))
+			return run(cmd, cfg, registry, args, launchTab)
 		},
 	}
 
@@ -70,6 +84,9 @@ func rootCmd() *cobra.Command {
 	root.Flags().BoolVar(&flags.ReadOnly, "readonly", false, "disable all mutating actions")
 	root.Flags().StringVar(&flags.LogLevel, "log-level", "", "log level: debug, info, warn, error")
 	root.Flags().StringVar(&flags.ConfigFile, "config", "", "path to config file (default "+config.Path()+")")
+	root.Flags().StringVar(&launchTab, "tab", "", "tab to open when launching into a specific item (e.g. logs, data)")
+
+	registerCompletion(root, registry)
 
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
@@ -78,11 +95,12 @@ func rootCmd() *cobra.Command {
 			fmt.Println(version.String())
 		},
 	})
+	root.AddCommand(prefetchCmd(registry))
 
 	return root
 }
 
-func run(cmd *cobra.Command, cfg config.Config, launch string) error {
+func run(cmd *cobra.Command, cfg config.Config, registry *resource.Registry, launchArgs []string, launchTab string) error {
 	cfgPath, err := dbx.ConfigPath()
 	if err != nil {
 		return err
@@ -95,11 +113,9 @@ func run(cmd *cobra.Command, cfg config.Config, launch string) error {
 		return fmt.Errorf("no usable profiles in %s — create one with `databricks configure`", cfgPath)
 	}
 
-	registry := resources.NewRegistry()
-	launch = normalizeLaunch(registry, launch)
 	// Validate the launch command up front so a typo prints a clean error to
 	// stderr rather than a flash behind the alt-screen (mirrors app.launchView).
-	if err := validateLaunch(registry, launch); err != nil {
+	if err := validateLaunch(registry, launchArgs, launchTab); err != nil {
 		return err
 	}
 
@@ -115,7 +131,7 @@ func run(cmd *cobra.Command, cfg config.Config, launch string) error {
 	}, store)
 	defer eng.Stop()
 
-	m := app.New(cfg, profiles, registry, dbx.NewPool(), eng, launch)
+	m := app.New(cfg, profiles, registry, dbx.NewPool(), eng, launchArgs, launchTab)
 	p := tea.NewProgram(m, tea.WithContext(cmd.Context()))
 	program.Store(p)
 
@@ -123,29 +139,46 @@ func run(cmd *cobra.Command, cfg config.Config, launch string) error {
 	return err
 }
 
-// validateLaunch checks a positional launch command before the TUI starts.
-// Empty (no args) and the special `sql` command are always accepted; anything
-// else must parse as a resource command. Keep in sync with app.launchView.
-func validateLaunch(reg *resource.Registry, launch string) error {
-	launch = strings.TrimSpace(launch)
-	if launch == "" || launch == "sql" || strings.HasPrefix(launch, "sql ") {
+// validateLaunch checks a positional launch command (and any --tab) before the
+// TUI starts. No args and the special `sql` command are always accepted as
+// launch commands; anything else must parse as a resource command. A --tab
+// selection additionally requires a resource with named tabs and a specific
+// item to open. Keep in sync with app.launchView.
+func validateLaunch(reg *resource.Registry, args []string, tab string) error {
+	tab = strings.TrimSpace(tab)
+	if len(args) == 0 || args[0] == "sql" {
+		if tab != "" {
+			return fmt.Errorf("--tab requires launching into a resource item, e.g. `apps <name> --tab %s`", tab)
+		}
 		return nil
 	}
-	_, err := reg.Parse(launch)
-	return err
+	cmd, err := reg.ParseArgs(args)
+	if err != nil {
+		return err
+	}
+	if tab != "" {
+		return validateTab(cmd, tab)
+	}
+	return nil
 }
 
-// normalizeLaunch applies launch-command sugar. `apps <name>` (or its alias) is
-// rewritten to `apps /<name>` so a bare app name lands directly on that app in
-// the list — apps is unscoped, so a positional would otherwise be an error.
-// Other commands and the explicit `apps /filter` form pass through unchanged.
-func normalizeLaunch(reg *resource.Registry, launch string) string {
-	fields := strings.Fields(strings.TrimSpace(launch))
-	if len(fields) != 2 || strings.HasPrefix(fields[1], "/") {
-		return launch
+// validateTab checks a --tab selection against a parsed launch command: the
+// resource must expose named tabs (resource.Tabber) and name a specific item
+// to open (a trailing positional / Item), and tab must be one of the
+// resource's tab names (case-insensitive).
+func validateTab(cmd resource.Command, tab string) error {
+	tabber, ok := cmd.Def.(resource.Tabber)
+	if !ok {
+		return fmt.Errorf("--tab is not supported by %s (it has no tabs)", cmd.Def.Name())
 	}
-	if def, ok := reg.Get(fields[0]); ok && def.Name() == "apps" {
-		return fields[0] + " /" + fields[1]
+	if cmd.Item == "" {
+		return fmt.Errorf("--tab requires naming a single %s, e.g. `%s <name> --tab %s`", cmd.Def.Name(), cmd.Def.Name(), tab)
 	}
-	return launch
+	tabs := tabber.Tabs()
+	for _, t := range tabs {
+		if strings.EqualFold(t, tab) {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown tab %q for %s (valid: %s)", tab, cmd.Def.Name(), strings.Join(tabs, ", "))
 }

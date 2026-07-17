@@ -50,28 +50,34 @@ type Model struct {
 	cmdOpen   bool
 	statusbar component.StatusBar
 
-	// launch is an optional CLI command (e.g. "tables main.silver") applied to
-	// the first profile selection in place of the default resource; consumed
-	// after use so later profile switches open the default view.
-	launch string
+	// launchArgs is an optional CLI command (already tokenized, e.g.
+	// {"tables","main.silver"}) applied to the first profile selection in place
+	// of the default resource; consumed after use so later profile switches open
+	// the default view. launchTab is the optional `--tab` selection: the tab to
+	// land on when the launch command auto-opens a specific item.
+	launchArgs []string
+	launchTab  string
 
 	width, height int
 }
 
 // New builds the root model. When cfg.Profile is set the picker is skipped.
-// launch is an optional command (same syntax as the ':' bar) opened in place
-// of the default resource on the first profile selection; "" opens the default.
-func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry, pool *dbx.Pool, eng *engine.Engine, launch string) Model {
+// launchArgs is an optional tokenized command (same grammar as the ':' bar)
+// opened in place of the default resource on the first profile selection; empty
+// opens the default. launchTab is the optional `--tab` selection applied when
+// the launch command auto-opens a specific item (see launchView).
+func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry, pool *dbx.Pool, eng *engine.Engine, launchArgs []string, launchTab string) Model {
 	m := Model{
-		cfg:      cfg,
-		th:       theme.Default(),
-		registry: registry,
-		pool:     pool,
-		eng:      eng,
-		profiles: profiles,
-		favs:     favorites.NewDefault(),
-		cmdbar:   component.NewCmdBar(completer(registry)),
-		launch:   strings.TrimSpace(launch),
+		cfg:        cfg,
+		th:         theme.Default(),
+		registry:   registry,
+		pool:       pool,
+		eng:        eng,
+		profiles:   profiles,
+		favs:       favorites.NewDefault(),
+		cmdbar:     component.NewCmdBar(completer(registry)),
+		launchArgs: launchArgs,
+		launchTab:  strings.TrimSpace(launchTab),
 	}
 
 	if cfg.Profile != "" {
@@ -110,26 +116,26 @@ func (m *Model) selectProfile(p dbx.Profile) {
 // profile selection; a parse error flashes and falls back to the default view.
 // Keep in sync with validateLaunch in cmd/lazydbx (which pre-checks at startup).
 func (m *Model) launchView() (view.View, bool) {
-	input := m.launch
-	m.launch = ""
-	if input == "" {
+	args := m.launchArgs
+	m.launchArgs = nil
+	if len(args) == 0 {
 		return nil, false
 	}
-	if input == "sql" || strings.HasPrefix(input, "sql ") {
-		query := strings.TrimSpace(strings.TrimPrefix(input, "sql"))
+	if args[0] == "sql" {
+		query := strings.TrimSpace(strings.Join(args[1:], " "))
 		return view.NewSQLView(m.th, m.clients, m.cfg.SQL, query, false), true
 	}
-	cmd, err := m.registry.Parse(input)
+	cmd, err := m.registry.ParseArgs(args)
 	if err != nil {
 		m.statusbar.Flash(component.FlashError, err.Error(), time.Now())
 		return nil, false
 	}
 	v := m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter)
-	// `apps <name>` (normalized to a filter) opens that app directly rather than
-	// leaving the user on the filtered list.
-	if cmd.Def.Name() == "apps" && cmd.Filter != "" {
+	// A positional item selector opens that row directly rather than leaving the
+	// user on the list; the requested tab (if any) rides along.
+	if cmd.Item != "" {
 		if br, ok := v.(*view.Browser); ok {
-			br.SetAutoOpen(cmd.Filter)
+			br.SetAutoOpen(cmd.Item, m.launchTab)
 		}
 	}
 	return v, true
@@ -232,7 +238,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(tabs) == 0 {
 			return m, nil
 		}
-		return m.push(view.NewTabbed(m.th, msg.Title, tabs))
+		return m.push(view.NewTabbed(m.th, msg.Title, tabs, msg.Active))
 
 	case view.ProfileSelectedMsg:
 		m.selectProfile(msg.Profile)
@@ -386,7 +392,14 @@ func (m Model) exec(input string) (tea.Model, tea.Cmd) {
 		m.statusbar.Flash(component.FlashError, err.Error(), time.Now())
 		return m, nil
 	}
-	return m.push(m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter))
+	v := m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter)
+	// A positional item selector opens that row directly, mirroring launch.
+	if cmd.Item != "" {
+		if br, ok := v.(*view.Browser); ok {
+			br.SetAutoOpen(cmd.Item, "")
+		}
+	}
+	return m.push(v)
 }
 
 func (m Model) helpView() view.View {

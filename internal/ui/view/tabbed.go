@@ -28,9 +28,14 @@ type Tabbed struct {
 	active int
 }
 
-// NewTabbed builds the container; the first tab starts active.
-func NewTabbed(th theme.Theme, title string, tabs []Tab) *Tabbed {
-	return &Tabbed{th: th, title: title, tabs: tabs}
+// NewTabbed builds the container. active selects the initially shown tab
+// (0-based); out-of-range values clamp to the first tab, so callers can pass a
+// resolved index without bounds-checking.
+func NewTabbed(th theme.Theme, title string, tabs []Tab, active int) *Tabbed {
+	if active < 0 || active >= len(tabs) {
+		active = 0
+	}
+	return &Tabbed{th: th, title: title, tabs: tabs, active: active}
 }
 
 // Init starts every tab so all of them prefetch — switching feels instant.

@@ -113,6 +113,24 @@ type Opener interface {
 	EnterMsg(c *dbx.Clients, scope Scope, row Row) any
 }
 
+// RowNamer is optionally implemented by defs whose rows carry a human name
+// distinct from Row.ID (e.g. jobs: Row.ID is the numeric job id, but the CLI
+// refers to jobs by name). The name is offered as the shell-completion
+// candidate and accepted as a launch Item selector alongside the ID. It must
+// read from Row.Cells (not Row.Data), so it also works on rows restored from
+// the on-disk cache, whose Data is a generic map.
+type RowNamer interface {
+	RowName(row Row) string
+}
+
+// Tabber is optionally implemented by Opener defs to expose their tab names
+// statically — before EnterMsg runs with live data. The names and order must
+// match the tabs EnterMsg produces. It lets the CLI validate and complete a
+// `--tab` launch selection (see cmd/lazydbx) without opening the workspace.
+type Tabber interface {
+	Tabs() []string
+}
+
 // WebLinker is optionally implemented by defs whose rows map to a page in the
 // Databricks workspace web UI. The browser binds `o` to open that page in the
 // system browser. host is the workspace base URL (e.g.

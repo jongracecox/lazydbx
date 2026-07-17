@@ -75,6 +75,9 @@ func (AppsDef) Actions() []resource.Action {
 	}
 }
 
+// Tabs implements resource.Tabber: the tab names EnterMsg produces, in order.
+func (AppsDef) Tabs() []string { return []string{"details", "logs"} }
+
 // EnterMsg implements resource.Opener: selecting an app opens tabs — its logs
 // beside its metadata. Rows restored from the on-disk cache arrive with Data as
 // a map rather than a dbx.App; appFromRow recovers the app so Enter always

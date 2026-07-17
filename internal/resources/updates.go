@@ -67,6 +67,9 @@ func (UpdatesDef) Actions() []resource.Action {
 	}
 }
 
+// Tabs implements resource.Tabber: the tab names EnterMsg produces, in order.
+func (UpdatesDef) Tabs() []string { return []string{"events", "details"} }
+
 // EnterMsg implements resource.Opener: selecting an update opens tabs —
 // the pipeline event log beside the update's metadata.
 func (UpdatesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {

@@ -48,6 +48,9 @@ func (TablesDef) Actions() []resource.Action {
 	}
 }
 
+// Tabs implements resource.Tabber: the tab names EnterMsg produces, in order.
+func (TablesDef) Tabs() []string { return []string{"columns", "data", "details"} }
+
 // EnterMsg implements resource.Opener: Enter opens the tabbed table view
 // (columns │ data │ details) instead of a plain child drill-down.
 func (TablesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
