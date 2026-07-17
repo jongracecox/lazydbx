@@ -18,9 +18,9 @@ type Tab struct {
 }
 
 // Tabbed hosts sibling views of one subject (e.g. a table's columns / data /
-// details) behind a tab bar. `[` and `]` switch tabs; every other message
-// routes to the active tab, except non-key messages, which broadcast so
-// background tabs keep receiving their data.
+// details) behind a tab bar. `[`/`]` (and tab/shift+tab) switch tabs; every
+// other message routes to the active tab, except non-key messages, which
+// broadcast so background tabs keep receiving their data.
 type Tabbed struct {
 	th     theme.Theme
 	title  string
@@ -65,7 +65,7 @@ func (t *Tabbed) CapturesKeys() bool {
 // Hints prepends the tab-switch keys to the active tab's hints.
 func (t *Tabbed) Hints() []key.Binding {
 	hints := []key.Binding{
-		key.NewBinding(key.WithKeys("["), key.WithHelp("[/]", "switch tab")),
+		key.NewBinding(key.WithKeys("[", "]", "tab", "shift+tab"), key.WithHelp("[/]", "switch tab")),
 	}
 	return append(hints, t.tabs[t.active].View.Hints()...)
 }
@@ -85,10 +85,10 @@ func (t *Tabbed) Update(msg tea.Msg) (View, tea.Cmd) {
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
 		if !t.CapturesKeys() {
 			switch kmsg.String() {
-			case "]":
+			case "]", "tab":
 				t.active = (t.active + 1) % len(t.tabs)
 				return t, nil
-			case "[":
+			case "[", "shift+tab":
 				t.active = (t.active + len(t.tabs) - 1) % len(t.tabs)
 				return t, nil
 			}
