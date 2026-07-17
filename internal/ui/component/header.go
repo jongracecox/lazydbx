@@ -13,9 +13,9 @@ import (
 // hintRows is how many rows the key-hint block may occupy.
 const hintRows = 4
 
-// banner is the top-right logo, k9s-style. Shown only on terminals with
+// Banner is the top-right logo, k9s-style. Shown only on terminals with
 // room to spare.
-const banner = `▄▄                   ▄▄▄▄▄▄   ▄▄▄▄▄▄▄   ▄▄▄   ▄▄▄
+const Banner = `▄▄                   ▄▄▄▄▄▄   ▄▄▄▄▄▄▄   ▄▄▄   ▄▄▄
 ██                   ███▀▀██▄ ███▀▀███▄ ████▄████
 ██  ▀▀█▄ ▀▀▀██ ██ ██ ███  ███ ███▄▄███▀  ▀█████▀
 ██ ▄█▀██   ▄█▀ ██▄██ ███  ███ ███  ███▄ ▄███████▄
@@ -38,13 +38,13 @@ func Header(th theme.Theme, width, height int, context string, badges []string, 
 	showBanner := width >= bannerMinWidth && height >= bannerMinHeight
 	if showBanner {
 		bannerBlock = renderBanner(th)
-		contentWidth = width - lipgloss.Width(banner) - 2
+		contentWidth = width - lipgloss.Width(Banner) - 2
 	}
 
 	var b strings.Builder
 	var line string
 	if !showBanner {
-		// The banner carries the app identity; without it, fall back to
+		// The Banner carries the app identity; without it, fall back to
 		// the compact name chip.
 		line = th.Logo.Render(" lazydbx ") + " "
 	}
@@ -66,8 +66,8 @@ func Header(th theme.Theme, width, height int, context string, badges []string, 
 // renderBanner styles the logo and tucks the app name + version into the
 // bottom-right, one line above the base (beside the y descender).
 func renderBanner(th theme.Theme) string {
-	lines := strings.Split(banner, "\n")
-	bannerWidth := lipgloss.Width(banner)
+	lines := strings.Split(Banner, "\n")
+	bannerWidth := lipgloss.Width(Banner)
 	tag := "lazydbx " + version.Version
 
 	out := make([]string, len(lines))
