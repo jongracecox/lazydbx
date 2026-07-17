@@ -11,7 +11,7 @@ import (
 )
 
 // hintRows is how many rows the key-hint block may occupy.
-const hintRows = 3
+const hintRows = 4
 
 // banner is the top-right logo, k9s-style. Shown only on terminals with
 // room to spare.
