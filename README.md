@@ -1,5 +1,16 @@
 # lazydbx
 
+[![CI](https://github.com/jongracecox/lazydbx/actions/workflows/ci.yml/badge.svg)](https://github.com/jongracecox/lazydbx/actions/workflows/ci.yml)
+[![Release](https://github.com/jongracecox/lazydbx/actions/workflows/release.yml/badge.svg)](https://github.com/jongracecox/lazydbx/actions/workflows/release.yml)
+![coverage](https://raw.githubusercontent.com/jongracecox/lazydbx/badges/coverage.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jongracecox/lazydbx.svg)](https://pkg.go.dev/github.com/jongracecox/lazydbx)
+[![Latest release](https://img.shields.io/github/v/release/jongracecox/lazydbx.svg)](https://github.com/jongracecox/lazydbx/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/jongracecox/lazydbx.svg)](https://github.com/jongracecox/lazydbx/commits/main)
+[![License](https://img.shields.io/github/license/jongracecox/lazydbx.svg)](https://github.com/jongracecox/lazydbx/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/jongracecox/lazydbx.svg?style=social)](https://github.com/jongracecox/lazydbx/stargazers)
+
+[![buymeacoffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/jongracecox)
+
 A lazier way to Databricks. A fast, colorful, keyboard-driven terminal UI —
 inspired by [k9s](https://github.com/derailed/k9s) — for browsing Unity
 Catalog, running SQL, triaging jobs and pipelines, and managing your
