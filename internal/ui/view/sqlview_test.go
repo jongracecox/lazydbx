@@ -217,6 +217,39 @@ func TestSQLCapturesKeys(t *testing.T) {
 	assert.True(t, sv.CapturesKeys())
 }
 
+func TestSQLTabCycler(t *testing.T) {
+	v := newSQLView(t, dbx.DAOs{}, "", false)
+	require.Equal(t, focusEditor, v.focus, "editor focused on construction")
+
+	// Forward: editor -> results is an internal step (consumes the key).
+	assert.True(t, v.AdvanceFocus(true))
+	assert.Equal(t, focusResults, v.focus)
+
+	// Forward again: at the boundary, so the container should switch tabs.
+	assert.False(t, v.AdvanceFocus(true))
+	assert.Equal(t, focusResults, v.focus, "focus unchanged at the boundary")
+
+	// Backward: results -> editor is an internal step.
+	assert.True(t, v.AdvanceFocus(false))
+	assert.Equal(t, focusEditor, v.focus)
+
+	// Backward again: at the boundary.
+	assert.False(t, v.AdvanceFocus(false))
+	assert.Equal(t, focusEditor, v.focus)
+
+	// EnterFocus lands on the entry pane for the arrival direction.
+	v.EnterFocus(false)
+	assert.Equal(t, focusResults, v.focus, "entering backward lands on results")
+	v.EnterFocus(true)
+	assert.Equal(t, focusEditor, v.focus, "entering forward lands on editor")
+
+	// An open picker swallows the key rather than letting the cycle escape it.
+	got, _ := v.handleKey(sqlPress("ctrl+w"))
+	sv := got.(*SQLView)
+	require.True(t, sv.pickerOpen)
+	assert.True(t, sv.AdvanceFocus(true))
+}
+
 func TestSQLAutoExecOnInit(t *testing.T) {
 	submitted := false
 	stmts := &fakeStatements{
@@ -233,6 +266,7 @@ func TestSQLAutoExecOnInit(t *testing.T) {
 		Statements: stmts,
 	}
 	v := newSQLView(t, daos, "select * from t", true)
+	assert.Equal(t, focusEditor, v.focus, "auto-exec lands on the SQL editor, not results")
 	whMsg := runCmd(t, v.loadWarehouses())
 	got, cmd := v.Update(whMsg)
 	sv := got.(*SQLView)
