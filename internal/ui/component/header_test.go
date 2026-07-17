@@ -100,7 +100,7 @@ func TestRenderBannerCarriesVersionTag(t *testing.T) {
 	out := renderBanner(th)
 	assert.Contains(t, out, "lazydbx", "banner tucks the app name in")
 	// The banner keeps its shape (same line count as the raw art).
-	require.Equal(t, strings.Count(banner, "\n"), strings.Count(out, "\n"))
+	require.Equal(t, strings.Count(Banner, "\n"), strings.Count(out, "\n"))
 }
 
 func TestHeaderClampsToWidth(t *testing.T) {
