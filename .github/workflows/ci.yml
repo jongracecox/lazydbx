@@ -34,7 +34,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +64,23 @@ jobs:
         with:
           recreate: true
           path: code-coverage-results.md
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/^total:/ {print int($3)}')
+          pipx run anybadge --value="$COVERAGE" --suffix="%" --file=coverage.svg \
+            --label=coverage --overwrite 50=red 60=orange 70=yellow 80=green 90=brightgreen
+      - name: Publish badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cp coverage.svg /tmp/coverage.svg
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin badges:badges 2>/dev/null && git checkout badges || { git checkout --orphan badges && git rm -rf . ; }
+          cp /tmp/coverage.svg coverage.svg
+          git add coverage.svg
+          git commit -m "Update coverage badge" || true
+          git push origin badges --force
 
   lint:
     runs-on: ubuntu-latest
