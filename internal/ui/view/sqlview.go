@@ -89,6 +89,10 @@ const (
 // maxCell caps the width of any results cell (and thus column) in characters.
 const maxCell = 40
 
+// hStep is the per-keypress horizontal scroll distance (h/l, ←/→) in columns.
+// One character at a time is too fine for wide grids; home/end page a screen.
+const hStep = 6
+
 // warehouseCols describes the inline warehouse picker table.
 var warehouseCols = []resource.ColSpec[dbx.Warehouse]{
 	{Column: resource.Column{Title: "NAME"}, Extract: func(w dbx.Warehouse) string { return w.Name }},
@@ -167,6 +171,7 @@ func (v *SQLView) Hints() []key.Binding {
 		hints = append(hints,
 			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "scroll")),
 			key.NewBinding(key.WithKeys("h"), key.WithHelp("h/l", "scroll ↔")),
+			key.NewBinding(key.WithKeys("home"), key.WithHelp("home/end", "page ↔")),
 		)
 	}
 	return hints
@@ -227,14 +232,16 @@ func (v *SQLView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	// (j/k/pgup/pgdn) to the viewport.
 	switch msg.String() {
 	case "h", "left":
-		if v.xoff > 0 {
-			v.xoff--
-		}
+		v.setXOff(v.xoff - hStep)
 		return v, nil
 	case "l", "right":
-		if v.xoff < v.maxXOff() {
-			v.xoff++
-		}
+		v.setXOff(v.xoff + hStep)
+		return v, nil
+	case "home":
+		v.setXOff(v.xoff - v.hPage())
+		return v, nil
+	case "end":
+		v.setXOff(v.xoff + v.hPage())
 		return v, nil
 	}
 	var cmd tea.Cmd
@@ -564,6 +571,17 @@ func (v *SQLView) maxXOff() int {
 	return v.gridWidth - v.width
 }
 
+// setXOff moves the horizontal offset to x, clamped to the valid range.
+func (v *SQLView) setXOff(x int) {
+	v.xoff = min(max(0, x), v.maxXOff())
+}
+
+// hPage is the horizontal page step: nearly a full screen width, keeping a
+// small overlap so a column or two carries over between pages for context.
+func (v *SQLView) hPage() int {
+	return max(1, v.width-8)
+}
+
 // pad right-pads s with spaces to display width w.
 func pad(s string, w int) string {
 	if gap := w - ansi.StringWidth(s); gap > 0 {
@@ -609,26 +627,39 @@ func (v *SQLView) renderPicker(width, height int) string {
 }
 
 func (v *SQLView) renderResults(width, height int) string {
-	if !v.vpOK {
-		v.vp = viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
-		v.vpOK = true
-	} else {
-		v.vp.SetWidth(width)
-		v.vp.SetHeight(height)
-	}
-
 	if len(v.gridLines) == 0 {
+		if !v.vpOK {
+			v.vp = viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
+			v.vpOK = true
+		} else {
+			v.vp.SetWidth(width)
+			v.vp.SetHeight(height)
+		}
 		v.vp.SetContent(v.th.Subtle.Render("no results — press ctrl+e to execute"))
 		return v.vp.View()
 	}
 
-	// Apply the horizontal offset by cutting each line to the visible window.
-	windowed := make([]string, len(v.gridLines))
-	for i, l := range v.gridLines {
+	// Pin the header line at the top; only the data rows scroll in the
+	// viewport, so the column names stay on screen as the user pages down.
+	header := ansi.Cut(v.gridLines[0], v.xoff, v.xoff+width)
+
+	bodyHeight := max(1, height-1)
+	if !v.vpOK {
+		v.vp = viewport.New(viewport.WithWidth(width), viewport.WithHeight(bodyHeight))
+		v.vpOK = true
+	} else {
+		v.vp.SetWidth(width)
+		v.vp.SetHeight(bodyHeight)
+	}
+
+	// Apply the horizontal offset by cutting each row to the visible window.
+	rows := v.gridLines[1:]
+	windowed := make([]string, len(rows))
+	for i, l := range rows {
 		windowed[i] = ansi.Cut(l, v.xoff, v.xoff+width)
 	}
 	v.vp.SetContent(strings.Join(windowed, "\n"))
-	return v.vp.View()
+	return header + "\n" + v.vp.View()
 }
 
 func (v *SQLView) renderStatus(width int) string {
