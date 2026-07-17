@@ -110,22 +110,19 @@ func NewSQLView(th theme.Theme, clients *dbx.Clients, sqlCfg config.SQLConfig, q
 	ta := textarea.New()
 	ta.SetValue(query)
 	ta.CursorEnd()
-	// Auto-exec previews start focused on the results (browsing, not
-	// editing) — otherwise typed keys like tab-switching would land in the
-	// query text. Ad-hoc editors start in the editor.
-	focus := focusEditor
-	if autoExec {
-		focus = focusResults
-	} else {
-		ta.Focus()
-	}
+	// Land focused on the editor (cursor in the query) whether this is an
+	// ad-hoc editor or an auto-exec preview — so arriving on the SQL/data
+	// screen starts on the SQL. tab/shift+tab then step to the results and back
+	// (standalone via toggleFocus, inside a Tabbed via AdvanceFocus). Since the
+	// container owns tab now, typed keys no longer risk switching tabs.
+	ta.Focus()
 	return &SQLView{
 		th:       th,
 		clients:  clients,
 		sqlCfg:   sqlCfg,
 		editor:   ta,
 		state:    stateIdle,
-		focus:    focus,
+		focus:    focusEditor,
 		autoExec: autoExec,
 	}
 }
@@ -263,13 +260,59 @@ func (v *SQLView) handlePickerKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	return v, cmd
 }
 
+// setFocus moves focus to f and syncs the editor's focus state so it only
+// draws its cursor / consumes typing while selected.
+func (v *SQLView) setFocus(f focusTarget) {
+	v.focus = f
+	if f == focusEditor {
+		v.editor.Focus()
+	} else {
+		v.editor.Blur()
+	}
+}
+
+// toggleFocus flips between the editor and results panes. It drives tab when
+// this view is used standalone (`:sql`, OpenSQLMsg); inside a Tabbed container
+// the AdvanceFocus/EnterFocus cycle takes over instead.
 func (v *SQLView) toggleFocus() {
 	if v.focus == focusEditor {
-		v.focus = focusResults
-		v.editor.Blur()
+		v.setFocus(focusResults)
 	} else {
-		v.focus = focusEditor
-		v.editor.Focus()
+		v.setFocus(focusEditor)
+	}
+}
+
+// AdvanceFocus makes the editor and results panes act as stops in the global
+// tab cycle (see view.TabCycler). Moving forward from the editor lands on the
+// results; moving back from the results lands on the editor. At the boundary
+// (results going forward, editor going back) it returns false so the container
+// switches tabs. While the warehouse picker is open it consumes the key so the
+// cycle can't slip past an open modal.
+func (v *SQLView) AdvanceFocus(forward bool) bool {
+	if v.pickerOpen {
+		return true
+	}
+	if forward {
+		if v.focus == focusEditor {
+			v.setFocus(focusResults)
+			return true
+		}
+		return false
+	}
+	if v.focus == focusResults {
+		v.setFocus(focusEditor)
+		return true
+	}
+	return false
+}
+
+// EnterFocus places focus at the pane the cycle arrives on: the editor when
+// entering forward (its first stop), the results when entering backward.
+func (v *SQLView) EnterFocus(forward bool) {
+	if forward {
+		v.setFocus(focusEditor)
+	} else {
+		v.setFocus(focusResults)
 	}
 }
 

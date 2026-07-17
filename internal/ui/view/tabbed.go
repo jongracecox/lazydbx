@@ -17,10 +17,25 @@ type Tab struct {
 	View View
 }
 
+// TabCycler is implemented by a tab's view when it has internal focus stops
+// (e.g. the SQL editor / results split) that should participate in the global
+// tab cycle instead of colliding with it. Tabbed consults it on tab/shift+tab:
+// AdvanceFocus moves the internal focus one step in the given direction and
+// returns true when it did so; a false return means the view is already at its
+// boundary, so Tabbed advances to the adjacent tab. EnterFocus then places the
+// arriving view at its entry boundary (forward → first stop, backward → last).
+// This is the sanctioned way to resolve a tab-key conflict — see CLAUDE.md.
+type TabCycler interface {
+	AdvanceFocus(forward bool) bool
+	EnterFocus(forward bool)
+}
+
 // Tabbed hosts sibling views of one subject (e.g. a table's columns / data /
-// details) behind a tab bar. `[`/`]` (and tab/shift+tab) switch tabs; every
-// other message routes to the active tab, except non-key messages, which
-// broadcast so background tabs keep receiving their data.
+// details) behind a tab bar. tab/shift+tab step through the tabs and any
+// internal focus stops a tab exposes via TabCycler (so a tab-using pane like
+// the SQL editor no longer fights the container for the key); `[`/`]` jump
+// whole tabs, skipping internal stops. Every other key routes to the active
+// tab, and non-key messages broadcast so background tabs keep receiving data.
 type Tabbed struct {
 	th     theme.Theme
 	title  string
@@ -83,18 +98,27 @@ func (t *Tabbed) Status(now time.Time) string {
 	return ""
 }
 
-// Update switches tabs on [/] (unless the active tab captures keys) and
-// otherwise routes: key messages to the active tab, everything else to all
-// tabs so inactive ones stay live.
+// Update cycles focus on tab/shift+tab, jumps whole tabs on [/] (unless the
+// active tab captures keys, so the bracket keys stay literal while typing), and
+// otherwise routes: key messages to the active tab, everything else to all tabs
+// so inactive ones stay live.
 func (t *Tabbed) Update(msg tea.Msg) (View, tea.Cmd) {
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
-		if !t.CapturesKeys() {
-			switch kmsg.String() {
-			case "]", "tab":
-				t.active = (t.active + 1) % len(t.tabs)
+		switch kmsg.String() {
+		case "tab":
+			t.cycle(true)
+			return t, nil
+		case "shift+tab":
+			t.cycle(false)
+			return t, nil
+		case "]":
+			if !t.CapturesKeys() {
+				t.switchTab(true)
 				return t, nil
-			case "[", "shift+tab":
-				t.active = (t.active + len(t.tabs) - 1) % len(t.tabs)
+			}
+		case "[":
+			if !t.CapturesKeys() {
+				t.switchTab(false)
 				return t, nil
 			}
 		}
@@ -112,6 +136,30 @@ func (t *Tabbed) Update(msg tea.Msg) (View, tea.Cmd) {
 		}
 	}
 	return t, tea.Batch(cmds...)
+}
+
+// cycle advances one step in direction across the unified tab/focus loop: it
+// first asks the active tab (when it is a TabCycler) to move its internal
+// focus; only when the tab has no internal stops or is already at its boundary
+// does it switch to the adjacent tab, landing the arriving tab at its entry
+// boundary.
+func (t *Tabbed) cycle(forward bool) {
+	if c, ok := t.tabs[t.active].View.(TabCycler); ok && c.AdvanceFocus(forward) {
+		return
+	}
+	t.switchTab(forward)
+	if c, ok := t.tabs[t.active].View.(TabCycler); ok {
+		c.EnterFocus(forward)
+	}
+}
+
+// switchTab moves the active index one tab in direction, wrapping around.
+func (t *Tabbed) switchTab(forward bool) {
+	if forward {
+		t.active = (t.active + 1) % len(t.tabs)
+	} else {
+		t.active = (t.active + len(t.tabs) - 1) % len(t.tabs)
+	}
 }
 
 // Render draws the tab bar plus the active tab's body.
