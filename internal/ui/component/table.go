@@ -206,14 +206,36 @@ func (t *Table) reflow() {
 		}
 		brows[i] = cells
 	}
-	// Clearing rows while the column count changes avoids ragged data, but
-	// it also clamps the bubbles cursor to -1 — so restore it.
+	// When the columns are unchanged (a cursor move or a data refresh), update
+	// the rows in place: the bubbles table manages its scroll offset only in
+	// MoveUp/MoveDown, and SetRows(nil)+SetColumns would desync it, throwing the
+	// cursor row off-screen. When columns do change (a resize crossing the wide
+	// cutoff, or sort arrows), clear first — that also clamps the cursor to -1,
+	// so restore it.
+	if sameColumns(t.tbl.Columns(), bcols) {
+		t.tbl.SetRows(brows)
+		return
+	}
 	t.tbl.SetRows(nil)
 	t.tbl.SetColumns(bcols)
 	t.tbl.SetRows(brows)
 	if len(brows) > 0 {
 		t.tbl.SetCursor(min(max(cur, 0), len(brows)-1))
 	}
+}
+
+// sameColumns reports whether two column sets match in title and width — used
+// to keep reflow in-place (preserving scroll) when only rows/styling change.
+func sameColumns(a, b []btable.Column) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Title != b[i].Title || a[i].Width != b[i].Width {
+			return false
+		}
+	}
+	return true
 }
 
 // decorateTitle marks the sorted column with a direction arrow and, in sort

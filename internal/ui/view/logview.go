@@ -42,6 +42,10 @@ type LogView struct {
 	wrap   bool
 	xoff   int
 
+	// followInterval is the poll cadence while following, adjustable live with
+	// +/- (clamped to [followMin, followMax]).
+	followInterval time.Duration
+
 	// gen guards fetch results: it increments on every fetch trigger, and a
 	// logLoadedMsg carrying an older generation is dropped.
 	gen int
@@ -65,16 +69,24 @@ type LogView struct {
 	width, height int
 }
 
+// Follow poll cadence bounds and default (adjustable live with +/-).
+const (
+	followMin     = 1 * time.Second
+	followMax     = 60 * time.Second
+	followDefault = 3 * time.Second
+)
+
 // NewLogView builds the log viewer. When follow is true it starts tailing on
-// Init, re-invoking fetch every few seconds and jumping to the bottom on new
+// Init, re-invoking fetch every followInterval and jumping to the bottom on new
 // content.
 func NewLogView(th theme.Theme, title string, fetch func(ctx context.Context) (string, error), follow bool) *LogView {
 	return &LogView{
-		th:     th,
-		title:  title,
-		fetch:  fetch,
-		follow: follow,
-		search: component.NewFilterBar(),
+		th:             th,
+		title:          title,
+		fetch:          fetch,
+		follow:         follow,
+		followInterval: followDefault,
+		search:         component.NewFilterBar(),
 	}
 }
 
@@ -101,7 +113,7 @@ func (v *LogView) CapturesKeys() bool { return v.searchOpen }
 func (v *LogView) Hints() []key.Binding {
 	followHelp := "follow(off)"
 	if v.follow {
-		followHelp = "follow(on)"
+		followHelp = "follow(on " + fmtFollowInterval(v.followInterval) + ")"
 	}
 	wrapHelp := "wrap(off)"
 	if v.wrap {
@@ -109,6 +121,7 @@ func (v *LogView) Hints() []key.Binding {
 	}
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", followHelp)),
+		key.NewBinding(key.WithKeys("+"), key.WithHelp("+/-", "poll interval")),
 		key.NewBinding(key.WithKeys("w"), key.WithHelp("w", wrapHelp)),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match")),
@@ -171,6 +184,12 @@ func (v *LogView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "r", "ctrl+r":
 		cmd := v.fetchCmd()
 		return v, cmd
+	case "+", "=":
+		v.adjustInterval(time.Second)
+		return v, nil
+	case "-", "_":
+		v.adjustInterval(-time.Second)
+		return v, nil
 	case "ctrl+s":
 		cmd := v.save()
 		return v, cmd
@@ -255,10 +274,24 @@ func (v *LogView) onLogLoaded(msg logLoadedMsg) (View, tea.Cmd) {
 	return v, nil
 }
 
-// followTick arms the follow poll timer for the current follow session.
+// followTick arms the follow poll timer for the current follow session, using
+// the current followInterval (read at each tick, so live +/- adjustments take
+// effect on the next poll).
 func (v *LogView) followTick() tea.Cmd {
 	g := v.followGen
-	return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return followTickMsg{gen: g} })
+	return tea.Tick(v.followInterval, func(time.Time) tea.Msg { return followTickMsg{gen: g} })
+}
+
+// adjustInterval changes the follow poll cadence by delta, clamped to
+// [followMin, followMax].
+func (v *LogView) adjustInterval(delta time.Duration) {
+	v.followInterval += delta
+	switch {
+	case v.followInterval < followMin:
+		v.followInterval = followMin
+	case v.followInterval > followMax:
+		v.followInterval = followMax
+	}
 }
 
 func (v *LogView) onFollowTick(msg followTickMsg) (View, tea.Cmd) {
@@ -282,6 +315,12 @@ func (v *LogView) save() tea.Cmd {
 		}
 		return logSavedMsg{path: path}
 	}
+}
+
+// fmtFollowInterval renders the poll cadence compactly in seconds (the range
+// is 1–60s), e.g. "3s".
+func fmtFollowInterval(d time.Duration) string {
+	return strconv.Itoa(int(d.Round(time.Second)/time.Second)) + "s"
 }
 
 // sanitizeTitle reduces a title to a filesystem-safe slug.
@@ -448,7 +487,7 @@ func (v *LogView) Status(now time.Time) string {
 	}
 	parts := []string{strconv.Itoa(n) + " lines"}
 	if v.follow {
-		parts = append(parts, v.th.Warning.Render("following"))
+		parts = append(parts, v.th.Warning.Render("following "+fmtFollowInterval(v.followInterval)))
 	}
 	age := now.Sub(v.fetchedAt).Round(time.Second)
 	parts = append(parts, fmt.Sprintf("⟳ %s ago", age))

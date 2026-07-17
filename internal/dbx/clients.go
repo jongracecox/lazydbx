@@ -38,6 +38,7 @@ type DAOs struct {
 	Statements StatementDAO
 	Jobs       JobsDAO
 	Pipelines  PipelinesDAO
+	Apps       AppsDAO
 }
 
 // NewClients wraps a profile; no network I/O happens until first use.
@@ -152,6 +153,18 @@ func (c *Clients) Pipelines() (PipelinesDAO, error) {
 		return nil, err
 	}
 	return pipelinesDAO{w: w}, nil
+}
+
+// Apps returns the apps DAO.
+func (c *Clients) Apps() (AppsDAO, error) {
+	if c.daos.Apps != nil {
+		return c.daos.Apps, nil
+	}
+	w, err := c.workspace()
+	if err != nil {
+		return nil, err
+	}
+	return appsDAO{w: w}, nil
 }
 
 // Pool caches one Clients per profile name.

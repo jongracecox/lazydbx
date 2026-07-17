@@ -97,22 +97,28 @@ func (JobsDef) Describe(_ context.Context, _ *dbx.Clients, _ resource.Scope, row
 }
 
 // stateClass maps a lifecycle/result/health value to a semantic CellClass,
-// shared by runs, taskruns, pipelines, and updates. Case-insensitive.
+// shared by runs, taskruns, pipelines, updates, and apps. Case-insensitive.
 //
 // TERMINATED (job/run lifecycle state) is intentionally CellDefault, not
 // CellWarn: it's a neutral terminal state whose Result column (SUCCESS,
 // FAILED, CANCELED, ...) already carries the verdict — coloring the state
 // column too would be redundant and could clash with the result color.
+//
+// App states share this map: ACTIVE (compute healthy) is Good; CRASHED is Bad;
+// DEPLOYING/UPDATING/IN_PROGRESS are in-flight; STOPPED/STOPPING/UNAVAILABLE/
+// DELETING are Warn. An app's RUNNING app-state maps to CellRunning like a job
+// run — a running app reads as "running" rather than green.
 func stateClass(value string) resource.CellClass {
 	switch strings.ToUpper(value) {
-	case "SUCCESS", "SUCCEEDED", "COMPLETED", "IDLE", "HEALTHY":
+	case "SUCCESS", "SUCCEEDED", "COMPLETED", "IDLE", "HEALTHY", "ACTIVE":
 		return resource.CellGood
-	case "FAILED", "INTERNAL_ERROR", "ERROR", "UNHEALTHY":
+	case "FAILED", "INTERNAL_ERROR", "ERROR", "UNHEALTHY", "CRASHED":
 		return resource.CellBad
-	case "CANCELED", "CANCELLED", "TIMEDOUT", "TIMED_OUT", "SKIPPED", "TERMINATING":
+	case "CANCELED", "CANCELLED", "TIMEDOUT", "TIMED_OUT", "SKIPPED", "TERMINATING",
+		"STOPPED", "STOPPING", "UNAVAILABLE", "DELETING":
 		return resource.CellWarn
 	case "RUNNING", "PENDING", "STARTING", "INITIALIZING", "SETTING_UP_TABLES",
-		"WAITING_FOR_RESOURCES", "QUEUED", "CREATED":
+		"WAITING_FOR_RESOURCES", "QUEUED", "CREATED", "DEPLOYING", "UPDATING", "IN_PROGRESS":
 		return resource.CellRunning
 	default:
 		return resource.CellDefault

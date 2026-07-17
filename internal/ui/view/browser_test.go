@@ -47,6 +47,49 @@ func newTestBrowser(def resource.Def, scope resource.Scope) *Browser {
 	return NewBrowser(def, scope, clients, eng, theme.Default(), "", nil)
 }
 
+// openerDef is a stub def implementing resource.Opener; EnterMsg reports the
+// row it was asked to open.
+type openerDef struct{ crumbDef }
+
+type openedMsg struct{ id string }
+
+func (openerDef) EnterMsg(_ *dbx.Clients, _ resource.Scope, row resource.Row) any {
+	return openedMsg{id: row.ID}
+}
+
+func TestBrowserAutoOpen(t *testing.T) {
+	b := newTestBrowser(openerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
+	b.SetAutoOpen("beta")
+
+	// A cache/empty load must not fire or give up.
+	_, cmd := b.Update(engine.DataEvent{Key: b.key})
+	assert.Nil(t, cmd, "waits while no rows have loaded")
+
+	_, cmd = b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "alpha", Cells: []string{"alpha"}},
+		{ID: "beta", Cells: []string{"beta"}},
+	}})
+	require.NotNil(t, cmd, "opens once the target row loads")
+	opened, ok := cmd().(openedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "beta", opened.id)
+
+	// Fires only once.
+	_, cmd = b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "beta", Cells: []string{"beta"}}}})
+	assert.Nil(t, cmd)
+}
+
+func TestBrowserAutoOpenNotFound(t *testing.T) {
+	b := newTestBrowser(openerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
+	b.SetAutoOpen("ghost")
+
+	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "real", Cells: []string{"real"}}}})
+	require.NotNil(t, cmd, "gives up with a flash when the target is absent")
+	flash, ok := cmd().(FlashMsg)
+	require.True(t, ok)
+	assert.Contains(t, flash.Text, "ghost")
+}
+
 func TestBrowserFavorites(t *testing.T) {
 	def := crumbDef{name: "jobs"}
 	clients := dbx.NewClientsWithDAOs(dbx.Profile{Name: "test"}, dbx.DAOs{})
