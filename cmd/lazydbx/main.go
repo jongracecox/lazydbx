@@ -96,6 +96,7 @@ func run(cmd *cobra.Command, cfg config.Config, launch string) error {
 	}
 
 	registry := resources.NewRegistry()
+	launch = normalizeLaunch(registry, launch)
 	// Validate the launch command up front so a typo prints a clean error to
 	// stderr rather than a flash behind the alt-screen (mirrors app.launchView).
 	if err := validateLaunch(registry, launch); err != nil {
@@ -132,4 +133,19 @@ func validateLaunch(reg *resource.Registry, launch string) error {
 	}
 	_, err := reg.Parse(launch)
 	return err
+}
+
+// normalizeLaunch applies launch-command sugar. `apps <name>` (or its alias) is
+// rewritten to `apps /<name>` so a bare app name lands directly on that app in
+// the list — apps is unscoped, so a positional would otherwise be an error.
+// Other commands and the explicit `apps /filter` form pass through unchanged.
+func normalizeLaunch(reg *resource.Registry, launch string) string {
+	fields := strings.Fields(strings.TrimSpace(launch))
+	if len(fields) != 2 || strings.HasPrefix(fields[1], "/") {
+		return launch
+	}
+	if def, ok := reg.Get(fields[0]); ok && def.Name() == "apps" {
+		return fields[0] + " /" + fields[1]
+	}
+	return launch
 }

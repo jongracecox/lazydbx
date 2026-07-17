@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/adrg/xdg"
@@ -120,6 +121,32 @@ func TestLogFollowTickRefetches(t *testing.T) {
 	staleGen := v.followGen - 1
 	_, cmd = updateLog(v, followTickMsg{gen: staleGen})
 	assert.Nil(t, cmd, "tick from a previous follow session is dropped")
+}
+
+func TestLogFollowIntervalAdjust(t *testing.T) {
+	v, _ := newTestLog("body", true)
+	assert.Equal(t, followDefault, v.followInterval, "default interval")
+
+	// - decreases by 1s, clamped at the minimum.
+	for i := 0; i < 10; i++ {
+		v, _ = updateLog(v, logKey("-"))
+	}
+	assert.Equal(t, followMin, v.followInterval, "clamps at minimum")
+
+	// + increases by 1s, clamped at the maximum.
+	for i := 0; i < 200; i++ {
+		v, _ = updateLog(v, logKey("+"))
+	}
+	assert.Equal(t, followMax, v.followInterval, "clamps at maximum")
+
+	// The follow ticker reads the current interval.
+	v.followInterval = 7 * time.Second
+	cmd := v.followTick()
+	require.NotNil(t, cmd)
+
+	// The status line surfaces the interval while following.
+	v = loadContent(t, v)
+	assert.Contains(t, v.Status(time.Now()), "following 7s")
 }
 
 func TestLogSearchHighlightAndNavigate(t *testing.T) {

@@ -76,3 +76,22 @@ func (PipelinesDef) WebURL(host string, _ resource.Scope, row resource.Row) (str
 func (UpdatesDef) WebURL(host string, scope resource.Scope, row resource.Row) (string, bool) {
 	return webURL(host, "pipelines", scope["pipeline"], "updates", row.ID)
 }
+
+// WebURL implements resource.WebLinker: `o` opens the app's management page in
+// the workspace UI (row.ID is the app name).
+func (AppsDef) WebURL(host string, _ resource.Scope, row resource.Row) (string, bool) {
+	return webURL(host, "apps", row.ID)
+}
+
+// AltWebURL implements resource.AltWebLinker: `O` opens the deployed app itself
+// on its own host, when it has one.
+func (AppsDef) AltWebURL(_ string, _ resource.Scope, row resource.Row) (string, bool) {
+	app := appFromRow(row)
+	if app.URL == "" {
+		return "", false
+	}
+	return app.URL, true
+}
+
+// AltWebHint labels the `O` binding in the key help.
+func (AppsDef) AltWebHint() string { return "open app" }

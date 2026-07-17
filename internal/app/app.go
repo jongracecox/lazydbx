@@ -124,7 +124,15 @@ func (m *Model) launchView() (view.View, bool) {
 		m.statusbar.Flash(component.FlashError, err.Error(), time.Now())
 		return nil, false
 	}
-	return m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter), true
+	v := m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter)
+	// `apps <name>` (normalized to a filter) opens that app directly rather than
+	// leaving the user on the filtered list.
+	if cmd.Def.Name() == "apps" && cmd.Filter != "" {
+		if br, ok := v.(*view.Browser); ok {
+			br.SetAutoOpen(cmd.Filter)
+		}
+	}
+	return v, true
 }
 
 // completer feeds the command bar: an empty prompt lists every canonical
@@ -200,12 +208,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.OpenLogMsg:
 		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
 
+	case view.OpenLogTableMsg:
+		return m.push(view.NewLogTable(m.th, msg.Title, msg.Fetch, msg.Follow))
+
 	case view.OpenTabsMsg:
 		tabs := make([]view.Tab, 0, len(msg.Tabs))
 		for _, spec := range msg.Tabs {
 			switch {
 			case spec.Log != nil:
 				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLogView(m.th, spec.Name, spec.Log.Fetch, spec.Log.Follow)})
+			case spec.LogTable != nil:
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLogTable(m.th, spec.Name, spec.LogTable.Fetch, spec.LogTable.Follow)})
 			case spec.Detail != nil:
 				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLazyDescribe(m.th, msg.Title, spec.Detail)})
 			case spec.SQL != nil:
@@ -313,7 +326,7 @@ var modeKeys = map[string]string{
 	"J": "jobs",
 	"C": "catalogs",
 	"P": "pipelines",
-	"A": "apps", // registered in a later phase; flashes until then
+	"A": "apps",
 }
 
 // switchMode resets the stack to picker + the named root browser.
@@ -397,7 +410,7 @@ func (m Model) globalHints() []key.Binding {
 		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "profiles")),
-		key.NewBinding(key.WithKeys("J"), key.WithHelp("J/C/P", "jobs/catalogs/pipelines")),
+		key.NewBinding(key.WithKeys("J"), key.WithHelp("J/C/P/A", "jobs/catalogs/pipelines/apps")),
 		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}
 }

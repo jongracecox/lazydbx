@@ -122,6 +122,16 @@ type WebLinker interface {
 	WebURL(host string, scope Scope, row Row) (url string, ok bool)
 }
 
+// AltWebLinker is optionally implemented by defs that have a second, distinct
+// web target beyond WebLinker's primary one — the browser binds `O` to it. For
+// apps, `o` (WebLinker) opens the workspace management page while `O` opens the
+// deployed app itself. AltWebHint is the short verb shown in the key help
+// (e.g. "open app"); AltWebURL returns ok=false when the row has no such link.
+type AltWebLinker interface {
+	AltWebURL(host string, scope Scope, row Row) (url string, ok bool)
+	AltWebHint() string
+}
+
 // Def is the interface every browsable resource implements.
 type Def interface {
 	// Name is the canonical command name, e.g. "tables".

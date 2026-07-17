@@ -200,3 +200,40 @@ type PipelinesDAO interface {
 	// oldest first (one line per event: timestamp, level, message).
 	Events(ctx context.Context, pipelineID string, maxResults int) (string, error)
 }
+
+// App is a Databricks App, reduced to what the UI shows. ComputeState is the
+// state of the app's compute (ACTIVE, STARTING, STOPPED, ...); AppState is the
+// state of the deployed application process (RUNNING, DEPLOYING, CRASHED, ...).
+type App struct {
+	Name                  string    `yaml:"name" json:"name"`
+	Description           string    `yaml:"description,omitempty" json:"description,omitempty"`
+	URL                   string    `yaml:"url,omitempty" json:"url,omitempty"`
+	ComputeState          string    `yaml:"compute_state,omitempty" json:"compute_state,omitempty"`
+	ComputeMessage        string    `yaml:"compute_message,omitempty" json:"compute_message,omitempty"`
+	AppState              string    `yaml:"app_state,omitempty" json:"app_state,omitempty"`
+	AppMessage            string    `yaml:"app_message,omitempty" json:"app_message,omitempty"`
+	ActiveDeploymentID    string    `yaml:"active_deployment_id,omitempty" json:"active_deployment_id,omitempty"`
+	ActiveDeploymentState string    `yaml:"active_deployment_state,omitempty" json:"active_deployment_state,omitempty"`
+	Creator               string    `yaml:"creator,omitempty" json:"creator,omitempty"`
+	ServicePrincipalName  string    `yaml:"service_principal_name,omitempty" json:"service_principal_name,omitempty"`
+	CreatedAt             time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+	UpdatedAt             time.Time `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
+}
+
+// AppLogEntry is one runtime log record from an app's /logz/stream. Raw is the
+// original JSON frame, kept for the full pretty-printed drill-down.
+type AppLogEntry struct {
+	Time     time.Time `yaml:"time,omitempty" json:"time,omitempty"`
+	Severity string    `yaml:"severity,omitempty" json:"severity,omitempty"`
+	Source   string    `yaml:"source,omitempty" json:"source,omitempty"`
+	Message  string    `yaml:"message" json:"message"`
+	Raw      string    `yaml:"-" json:"-"`
+}
+
+// AppsDAO lists Databricks Apps and fetches an app's runtime logs.
+type AppsDAO interface {
+	List(ctx context.Context) ([]App, error)
+	// GetLogs returns the app's runtime log records. appURL is the deployed
+	// app's base URL (App.URL); logs stream from appURL + "/logz/stream".
+	GetLogs(ctx context.Context, appURL string) ([]AppLogEntry, error)
+}

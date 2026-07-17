@@ -56,6 +56,12 @@ type Browser struct {
 	stale     bool
 	loaded    bool
 
+	// autoOpenID, when set, makes the browser open the row with this ID once
+	// data arrives — how a CLI launch like `apps <name>` lands directly on the
+	// item instead of the list. Fires at most once (autoOpened).
+	autoOpenID string
+	autoOpened bool
+
 	width, height int
 }
 
@@ -180,6 +186,9 @@ func (b *Browser) Hints() []key.Binding {
 	if _, ok := b.def.(resource.WebLinker); ok {
 		hints = append(hints, key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")))
 	}
+	if alt, ok := b.def.(resource.AltWebLinker); ok {
+		hints = append(hints, key.NewBinding(key.WithKeys("O"), key.WithHelp("O", alt.AltWebHint())))
+	}
 	for _, a := range b.def.Actions() {
 		hints = append(hints, key.NewBinding(key.WithKeys(a.Key), key.WithHelp(a.Key, a.Name)))
 	}
@@ -192,6 +201,9 @@ func (b *Browser) Update(msg tea.Msg) (View, tea.Cmd) {
 	if ev, ok := msg.(engine.DataEvent); ok {
 		if ev.Key == b.key {
 			b.applyData(ev)
+			if cmd := b.maybeAutoOpen(); cmd != nil {
+				return b, cmd
+			}
 		}
 		return b, nil
 	}
@@ -342,6 +354,11 @@ func (b *Browser) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 			cmd := b.openWeb(linker)
 			return b, cmd
 		}
+	case "O":
+		if alt, ok := b.def.(resource.AltWebLinker); ok {
+			cmd := b.openAltWeb(alt)
+			return b, cmd
+		}
 	case "enter":
 		cmd := b.drillDown()
 		return b, cmd
@@ -370,12 +387,19 @@ func (b *Browser) drillDown() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	return b.enterRow(row)
+}
+
+// enterRow builds the command for opening a specific row: an Opener's richer
+// view, else a child drill-down, else describe (so Enter always does
+// something). Shared by drillDown (cursor row) and maybeAutoOpen.
+func (b *Browser) enterRow(row resource.Row) tea.Cmd {
 	if opener, isOpener := b.def.(resource.Opener); isOpener {
 		clients, scope := b.clients, b.scope
 		return func() tea.Msg { return opener.EnterMsg(clients, scope, row) }
 	}
 	if b.def.Child() == "" {
-		return b.describe()
+		return b.describeRow(row)
 	}
 	return func() tea.Msg {
 		return DrillDownMsg{
@@ -383,6 +407,32 @@ func (b *Browser) drillDown() tea.Cmd {
 			Scope:    b.def.ChildScope(b.scope, row),
 		}
 	}
+}
+
+// SetAutoOpen makes the browser open the row with id once data arrives.
+func (b *Browser) SetAutoOpen(id string) { b.autoOpenID = id }
+
+// maybeAutoOpen fires the one-shot auto-open once the target row has loaded.
+// It waits through empty/cache loads; once rows are present without the target,
+// it gives up with a flash so a bad name doesn't hang on the list silently.
+func (b *Browser) maybeAutoOpen() tea.Cmd {
+	if b.autoOpened || b.autoOpenID == "" || !b.loaded {
+		return nil
+	}
+	for _, r := range b.allRows {
+		if r.ID == b.autoOpenID {
+			b.autoOpened = true
+			return b.enterRow(r)
+		}
+	}
+	if len(b.allRows) > 0 {
+		id := b.autoOpenID
+		b.autoOpened = true
+		return func() tea.Msg {
+			return FlashMsg{Level: FlashWarn, Text: "no " + b.def.Name() + " named " + strconv.Quote(id)}
+		}
+	}
+	return nil
 }
 
 // openWeb builds the selected row's workspace URL and asks the app to open it
@@ -399,12 +449,30 @@ func (b *Browser) openWeb(linker resource.WebLinker) tea.Cmd {
 	return func() tea.Msg { return OpenURLMsg{URL: url} }
 }
 
+// openAltWeb builds the selected row's secondary URL (e.g. an app's deployed
+// URL) and asks the app to open it in the system browser.
+func (b *Browser) openAltWeb(alt resource.AltWebLinker) tea.Cmd {
+	row, ok := b.table.SelectedRow()
+	if !ok {
+		return nil
+	}
+	url, ok := alt.AltWebURL(b.clients.Profile().Host, b.scope, row)
+	if !ok {
+		return func() tea.Msg { return FlashMsg{Level: FlashWarn, Text: "no web link for this item"} }
+	}
+	return func() tea.Msg { return OpenURLMsg{URL: url} }
+}
+
 // describe loads the detail object and pushes a describe view.
 func (b *Browser) describe() tea.Cmd {
 	row, ok := b.table.SelectedRow()
 	if !ok {
 		return nil
 	}
+	return b.describeRow(row)
+}
+
+func (b *Browser) describeRow(row resource.Row) tea.Cmd {
 	def, clients, scope, th := b.def, b.clients, b.scope, b.th
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

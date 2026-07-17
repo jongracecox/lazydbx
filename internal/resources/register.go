@@ -15,5 +15,6 @@ func NewRegistry() *resource.Registry {
 	reg.MustRegister(TaskRunsDef{})
 	reg.MustRegister(PipelinesDef{})
 	reg.MustRegister(UpdatesDef{})
+	reg.MustRegister(AppsDef{})
 	return reg
 }

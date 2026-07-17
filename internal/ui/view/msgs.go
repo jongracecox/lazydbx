@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"time"
 
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/resource"
@@ -58,12 +59,32 @@ type TabSpec struct {
 	Name string
 	// Log shows a log viewer over the fetched text.
 	Log *LogTabSpec
+	// LogTable shows the structured, selectable log-record table.
+	LogTable *LogTableTabSpec
 	// Detail shows a lazily fetched describe view.
 	Detail func(ctx context.Context) (any, error)
 	// Browse shows a resource browser.
 	Browse *BrowseTabSpec
 	// SQL shows the SQL editor/preview.
 	SQL *SQLTabSpec
+}
+
+// LogRecord is one structured log entry rendered by the log-record table: a
+// collapsed one-line view (severity + message), expandable to the full Raw
+// payload, and filtered across every field. It is the view-layer projection of
+// a source log record (e.g. dbx.AppLogEntry).
+type LogRecord struct {
+	Time     time.Time
+	Severity string
+	Source   string
+	Message  string
+	Raw      string // full original payload, shown on drill-down
+}
+
+// LogTableTabSpec parameterizes a structured log-table tab.
+type LogTableTabSpec struct {
+	Fetch  func(ctx context.Context) ([]LogRecord, error)
+	Follow bool
 }
 
 // LogTabSpec parameterizes a log tab.
@@ -105,4 +126,13 @@ type OpenLogMsg struct {
 	Title  string
 	Follow bool // start with follow-tail enabled (for in-flight runs)
 	Fetch  func(ctx context.Context) (string, error)
+}
+
+// OpenLogTableMsg asks the app to open the structured log-record table. Fetch
+// is re-invoked while following, so it must be safe to call repeatedly. This is
+// how the apps `l` action launches the record view without constructing it.
+type OpenLogTableMsg struct {
+	Title  string
+	Follow bool
+	Fetch  func(ctx context.Context) ([]LogRecord, error)
 }

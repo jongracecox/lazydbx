@@ -51,6 +51,8 @@ lazydbx -p mydev schemas prod         # schemas in the 'prod' catalog
 lazydbx -p mydev tables main.silver   # drill straight to a schema's tables
 lazydbx -p mydev runs 123             # runs for job 123
 lazydbx -p mydev jobs /etl            # jobs list pre-filtered to 'etl'
+lazydbx -p mydev apps                 # open in the apps list
+lazydbx -p mydev apps my-app          # land directly on 'my-app'
 ```
 
 ## Development
