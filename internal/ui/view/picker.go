@@ -56,6 +56,7 @@ func (p *Picker) Title() string { return "profiles" }
 func (p *Picker) Hints() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "use profile")),
+		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "set color")),
 	}
 }
 
@@ -72,6 +73,12 @@ func (p *Picker) Update(msg tea.Msg) (View, tea.Cmd) {
 			if row, ok := p.table.SelectedRow(); ok {
 				profile := row.Data.(dbx.Profile)
 				return p, func() tea.Msg { return ProfileSelectedMsg{Profile: profile} }
+			}
+			return p, nil
+		case "c":
+			if row, ok := p.table.SelectedRow(); ok {
+				profile := row.Data.(dbx.Profile)
+				return p, func() tea.Msg { return OpenColorPickerMsg{Profile: profile.Name} }
 			}
 			return p, nil
 		case "esc":

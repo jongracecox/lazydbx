@@ -87,3 +87,45 @@ func TestLoadExplicitMissingFile(t *testing.T) {
 	_, err := Load(Flags{ConfigFile: filepath.Join(t.TempDir(), "nope.yaml")})
 	assert.Error(t, err)
 }
+
+func TestSaveSkin(t *testing.T) {
+	path := writeConfig(t, "log_level: debug\nsql:\n  warehouse_id: wh-1\n")
+	cfg, err := Load(Flags{ConfigFile: path})
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.SaveSkin("prod", "red"))
+
+	reloaded, err := Load(Flags{ConfigFile: path})
+	require.NoError(t, err)
+	assert.Equal(t, "red", reloaded.Skins["prod"], "highlight persisted")
+	assert.Equal(t, "debug", reloaded.LogLevel, "other settings preserved")
+	assert.Equal(t, "wh-1", reloaded.SQL.WarehouseID, "nested settings preserved")
+
+	// A second profile adds without clobbering the first.
+	require.NoError(t, cfg.SaveSkin("staging", "blue"))
+	reloaded, err = Load(Flags{ConfigFile: path})
+	require.NoError(t, err)
+	assert.Equal(t, "red", reloaded.Skins["prod"])
+	assert.Equal(t, "blue", reloaded.Skins["staging"])
+
+	// Clearing removes just that entry.
+	require.NoError(t, cfg.SaveSkin("prod", ""))
+	reloaded, err = Load(Flags{ConfigFile: path})
+	require.NoError(t, err)
+	assert.Empty(t, reloaded.Skins["prod"])
+	assert.Equal(t, "blue", reloaded.Skins["staging"])
+}
+
+func TestSaveSkinCreatesFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "config.yaml")
+	cfg, err := Load(Flags{ConfigFile: path})
+	// Explicit missing file errors on Load, so drive SaveSkin directly with a
+	// config whose path points at the (not-yet-existent) file.
+	_ = err
+	cfg.path = path
+	require.NoError(t, cfg.SaveSkin("prod", "green"))
+
+	reloaded, err := Load(Flags{ConfigFile: path})
+	require.NoError(t, err)
+	assert.Equal(t, "green", reloaded.Skins["prod"])
+}

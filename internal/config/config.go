@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -23,9 +24,16 @@ type Config struct {
 	LogLevel string    `koanf:"log_level"`
 	Refresh  Refresh   `koanf:"refresh"`
 	SQL      SQLConfig `koanf:"sql"`
-	// Skins maps profile-name globs to accent color names, k9s-style
-	// (e.g. "PROD-*": red). Matching is case-insensitive.
+	// Skins maps profile-name globs to a highlight color name, k9s-style
+	// (e.g. "PROD-*": red). Matching is case-insensitive. The color tints only
+	// the profile name + host in the header; the rest of the UI keeps the
+	// default accent. The in-app color picker (`c` on the profile screen)
+	// writes exact-name entries here via SaveSkin.
 	Skins map[string]string `koanf:"skins"`
+
+	// path is the file config was loaded from; SaveSkin writes back here. Not
+	// a koanf field — it is resolved by Load, not parsed.
+	path string
 }
 
 // Refresh controls poll cadence (seconds) for resource views.
@@ -109,5 +117,72 @@ func Load(flags Flags) (Config, error) {
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, fmt.Errorf("unmarshaling config: %w", err)
 	}
+	cfg.path = path
 	return cfg, nil
+}
+
+// SetSkin updates the in-memory highlight color for an exact profile name. An
+// empty color clears the entry. Persist the change with SaveSkin.
+func (c *Config) SetSkin(profile, color string) {
+	if color == "" {
+		delete(c.Skins, profile)
+		return
+	}
+	if c.Skins == nil {
+		c.Skins = map[string]string{}
+	}
+	c.Skins[profile] = color
+}
+
+// SaveSkin persists a single profile→color highlight to the config file,
+// touching only the `skins` map so other settings (and unknown keys) survive —
+// though YAML comments are not preserved by the round-trip. An empty color
+// removes the entry. The file and its parent directory are created if absent.
+func (c Config) SaveSkin(profile, color string) error {
+	path := c.path
+	if path == "" {
+		path = Path()
+	}
+	parser := yaml.Parser()
+
+	root := map[string]any{}
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if root, err = parser.Unmarshal(data); err != nil {
+			return fmt.Errorf("parsing config %s: %w", path, err)
+		}
+		if root == nil {
+			root = map[string]any{}
+		}
+	case !errors.Is(err, fs.ErrNotExist):
+		return fmt.Errorf("reading config %s: %w", path, err)
+	}
+
+	skins, _ := root["skins"].(map[string]any)
+	if skins == nil {
+		skins = map[string]any{}
+	}
+	if color == "" {
+		delete(skins, profile)
+	} else {
+		skins[profile] = color
+	}
+	if len(skins) == 0 {
+		delete(root, "skins")
+	} else {
+		root["skins"] = skins
+	}
+
+	out, err := parser.Marshal(root)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config dir: %w", err)
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		return fmt.Errorf("writing config %s: %w", path, err)
+	}
+	return nil
 }

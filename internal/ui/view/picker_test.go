@@ -33,6 +33,18 @@ func TestPickerSelectsProfile(t *testing.T) {
 	assert.Same(t, p, v)
 }
 
+func TestPickerOpensColorPicker(t *testing.T) {
+	profiles := []dbx.Profile{{Name: "alpha", Host: "https://a.cloud.databricks.com"}}
+	p := NewPicker(theme.Default(), profiles)
+	p.Render(100, 20)
+
+	_, cmd := p.Update(keyPress('c'))
+	require.NotNil(t, cmd, "c must open the color picker for the selected profile")
+	msg, ok := cmd().(OpenColorPickerMsg)
+	require.True(t, ok, "expected OpenColorPickerMsg, got %T", cmd())
+	assert.Equal(t, "alpha", msg.Profile)
+}
+
 func TestPickerMovesCursor(t *testing.T) {
 	profiles := []dbx.Profile{
 		{Name: "alpha", Host: "https://a.cloud.databricks.com"},

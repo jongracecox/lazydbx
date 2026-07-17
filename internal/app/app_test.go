@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/jongracecox/lazydbx/internal/dbx"
 	"github.com/jongracecox/lazydbx/internal/engine"
 	"github.com/jongracecox/lazydbx/internal/resources"
+	"github.com/jongracecox/lazydbx/internal/theme"
 	"github.com/jongracecox/lazydbx/internal/ui/view"
 )
 
@@ -81,11 +84,57 @@ func TestProfileSelectedOpensDefaultBrowser(t *testing.T) {
 	assert.Equal(t, defaultResource, topTitle(m))
 }
 
-func TestProdProfileGetsRedAccent(t *testing.T) {
+func TestSelectingProfileKeepsDefaultTheme(t *testing.T) {
 	m := newModel(t, config.Config{}, nil, "")
 	m = update(m, view.ProfileSelectedMsg{Profile: dbx.Profile{Name: "prod"}})
-	// prod smell → the theme accent shifts away from the default orange.
-	assert.NotEqual(t, "#FF6F00", m.th.Accent, "prod profile is themed differently")
+	// No auto-detection: the theme stays orange regardless of the name.
+	assert.Equal(t, theme.Default().Accent, m.th.Accent)
+}
+
+func TestHeaderHighlightChangesRender(t *testing.T) {
+	sized := func(m Model) Model {
+		return update(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	}
+	plain := sized(newModel(t, config.Config{Profile: "dev"}, nil, ""))
+	tinted := sized(newModel(t, config.Config{
+		Profile: "dev",
+		Skins:   map[string]string{"dev": "red"},
+	}, nil, ""))
+
+	plainOut := plain.View().Content
+	tintedOut := tinted.View().Content
+	assert.Contains(t, plainOut, "dev", "profile name shown either way")
+	assert.Contains(t, tintedOut, "dev")
+	assert.NotEqual(t, plainOut, tintedOut, "a configured highlight changes the header render")
+}
+
+func TestOpenColorPickerPushesPicker(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
+	m = update(m, view.OpenColorPickerMsg{Profile: "prod"})
+	_, ok := m.top().(*view.ColorPicker)
+	assert.True(t, ok, "OpenColorPickerMsg pushes the color picker")
+}
+
+func TestProfileColorSelectedUpdatesAndPersists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	xdg.Reload() // pick up the redirected config home
+
+	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
+	m = update(m, view.OpenColorPickerMsg{Profile: "prod"})
+	m = update(m, view.ProfileColorSelectedMsg{Profile: "prod", Color: "red"})
+
+	assert.Equal(t, "red", m.cfg.Skins["prod"], "in-memory config updated")
+	_, stillColorPicker := m.top().(*view.ColorPicker)
+	assert.False(t, stillColorPicker, "color picker is popped after applying")
+
+	data, err := os.ReadFile(config.Path())
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "red", "choice persisted to disk")
+
+	// Clearing removes the entry.
+	m = update(m, view.ProfileColorSelectedMsg{Profile: "prod", Color: ""})
+	_, ok := m.cfg.Skins["prod"]
+	assert.False(t, ok, "empty color clears the entry")
 }
 
 // --- launch args ---

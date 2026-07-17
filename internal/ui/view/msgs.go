@@ -43,6 +43,20 @@ type FlashMsg struct {
 // ProfileSelectedMsg is emitted by the profile picker.
 type ProfileSelectedMsg struct{ Profile dbx.Profile }
 
+// OpenColorPickerMsg asks the app to open the highlight-color picker for a
+// profile (via `c` on the profile screen). The app resolves the profile's
+// current color from config — views have no config access — and pushes the
+// ColorPicker.
+type OpenColorPickerMsg struct{ Profile string }
+
+// ProfileColorSelectedMsg is emitted by the color picker: set Profile's header
+// highlight to Color (a theme accent name; "" clears it). The app updates and
+// persists config, then pops back to the profile picker.
+type ProfileColorSelectedMsg struct {
+	Profile string
+	Color   string
+}
+
 // OpenSQLMsg asks the app to open the SQL editor/preview view pre-filled with
 // Query. When Execute is true the statement runs immediately on the view's
 // Init — this is how table preview launches a ready-to-run query without the
