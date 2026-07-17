@@ -92,12 +92,11 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 	return m
 }
 
-// selectProfile switches clients/theme and resets the stack to the profile
+// selectProfile switches clients and resets the stack to the profile
 // picker (the permanent top level — esc from the default browser lands
 // there) with the default resource browser above it.
 func (m *Model) selectProfile(p dbx.Profile) {
 	m.clients = m.pool.Get(p)
-	m.th = theme.ForProfile(p.Name, m.cfg.Skins)
 	m.cmdbar = component.NewCmdBar(completer(m.registry))
 
 	for _, v := range m.stack {
@@ -247,6 +246,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, top.Init()
 		}
 		return m, nil
+
+	case view.OpenColorPickerMsg:
+		return m.push(view.NewColorPicker(m.th, msg.Profile, m.cfg.Skins[msg.Profile]))
+
+	case view.ProfileColorSelectedMsg:
+		m.cfg.SetSkin(msg.Profile, msg.Color)
+		if err := m.cfg.SaveSkin(msg.Profile, msg.Color); err != nil {
+			m.statusbar.Flash(component.FlashError, "save color: "+err.Error(), time.Now())
+		} else if msg.Color == "" {
+			m.statusbar.Flash(component.FlashInfo, "cleared color for "+msg.Profile, time.Now())
+		} else {
+			m.statusbar.Flash(component.FlashInfo, msg.Profile+" color: "+msg.Color, time.Now())
+		}
+		return m.pop()
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -446,7 +459,13 @@ func (m Model) View() tea.View {
 	badges := []string{}
 	if m.clients != nil {
 		p := m.clients.Profile()
-		context = p.Name + " " + m.th.Subtle.Render("("+p.ShortHost()+")")
+		host := "(" + p.ShortHost() + ")"
+		if hl, ok := theme.HighlightColor(p.Name, m.cfg.Skins); ok {
+			chip := lipgloss.NewStyle().Background(hl).Foreground(theme.Contrast(hl)).Bold(true).Padding(0, 1)
+			context = chip.Render(p.Name + " " + host)
+		} else {
+			context = p.Name + " " + m.th.Subtle.Render(host)
+		}
 		if p.IsAccount() {
 			badges = append(badges, "ACCOUNT")
 		}

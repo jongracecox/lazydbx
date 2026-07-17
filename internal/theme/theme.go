@@ -8,10 +8,11 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Theme is the set of styles the app renders with. Later phases add skin
-// loading and per-profile accents (e.g. red for prod).
+// Theme is the set of styles the app renders with. The accent is app-wide and
+// constant; per-profile highlighting (see skins.go) colors only the header
+// name/host, leaving the rest of the UI on the default accent.
 type Theme struct {
-	// Accent is the profile-dependent highlight color.
+	// Accent is the app-wide highlight color.
 	Accent color.Color
 
 	Logo     lipgloss.Style
