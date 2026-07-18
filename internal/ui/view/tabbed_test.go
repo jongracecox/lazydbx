@@ -139,3 +139,42 @@ func TestTabbedTitleAndHints(t *testing.T) {
 	require.NotEmpty(t, tb.Hints())
 	assert.Equal(t, "tab", tb.Hints()[0].Help().Key)
 }
+
+// tabHintView is a fake tab body that advertises its own `tab`-bound hint
+// alongside a non-tab hint, standing in for SQLView's editor/results split.
+type tabHintView struct{ cyclerView }
+
+func (v *tabHintView) Hints() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "editor/results")),
+		key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl-e", "execute")),
+	}
+}
+
+func TestTabbedDropsChildTabHint(t *testing.T) {
+	th := theme.Default()
+	tb := NewTabbed(th, "t", []Tab{
+		{Name: "one", View: &tabHintView{cyclerView{body: "one"}}},
+		{Name: "two", View: NewDescribe(th, "two", map[string]string{"payload": "body-two"})},
+	}, 0)
+
+	// Only the container's own `tab` hint remains; the child's editor/results
+	// tab hint is folded into the unified cycle and dropped.
+	var tabHints int
+	for _, h := range tb.Hints() {
+		if bindsTab(h) {
+			tabHints++
+		}
+	}
+	assert.Equal(t, 1, tabHints, "exactly one tab hint")
+	assert.Equal(t, "switch tab", tb.Hints()[0].Help().Desc)
+
+	// Non-tab child hints survive.
+	var hasExecute bool
+	for _, h := range tb.Hints() {
+		if h.Help().Key == "ctrl-e" {
+			hasExecute = true
+		}
+	}
+	assert.True(t, hasExecute, "non-tab child hints are kept")
+}
