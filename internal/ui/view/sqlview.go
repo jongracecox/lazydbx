@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jongracecox/lazydbx/internal/config"
@@ -64,6 +65,10 @@ type SQLView struct {
 	gridLines []string
 	gridWidth int
 	xoff      int
+	// selRow is the highlighted data-row index (0-based into gridLines[1:]);
+	// rowOff is the first visible data row, kept so selRow stays on screen.
+	selRow int
+	rowOff int
 
 	width, height int
 }
@@ -169,7 +174,8 @@ func (v *SQLView) Hints() []key.Binding {
 	}
 	if v.focus == focusResults {
 		hints = append(hints,
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "scroll")),
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "select row")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "view row")),
 			key.NewBinding(key.WithKeys("h"), key.WithHelp("h/l", "scroll ↔")),
 			key.NewBinding(key.WithKeys("home"), key.WithHelp("home/end", "page ↔")),
 		)
@@ -228,25 +234,67 @@ func (v *SQLView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		return v, cmd
 	}
 
-	// Results focused: horizontal scroll on our own offset, everything else
-	// (j/k/pgup/pgdn) to the viewport.
+	// Results focused: j/k move the row cursor (kept in view at render time),
+	// h/l scroll horizontally, enter opens the selected row's detail.
 	switch msg.String() {
 	case "h", "left":
 		v.setXOff(v.xoff - hStep)
-		return v, nil
 	case "l", "right":
 		v.setXOff(v.xoff + hStep)
-		return v, nil
 	case "home":
 		v.setXOff(v.xoff - v.hPage())
-		return v, nil
 	case "end":
 		v.setXOff(v.xoff + v.hPage())
-		return v, nil
+	case "j", "down":
+		v.moveSel(1)
+	case "k", "up":
+		v.moveSel(-1)
+	case "pgdown":
+		v.moveSel(v.rowPage())
+	case "pgup":
+		v.moveSel(-v.rowPage())
+	case "enter":
+		cmd := v.openRowDetail()
+		return v, cmd
 	}
-	var cmd tea.Cmd
-	v.vp, cmd = v.vp.Update(msg)
-	return v, cmd
+	return v, nil
+}
+
+// moveSel shifts the row cursor by delta, clamped to the result rows.
+func (v *SQLView) moveSel(delta int) {
+	n := v.rowCount()
+	if n == 0 {
+		return
+	}
+	v.selRow = min(max(0, v.selRow+delta), n-1)
+}
+
+// rowCount is the number of data rows (gridLines minus the header line).
+func (v *SQLView) rowCount() int {
+	if len(v.gridLines) == 0 {
+		return 0
+	}
+	return len(v.gridLines) - 1
+}
+
+// rowPage is the vertical page step: the visible body height, at least 1.
+func (v *SQLView) rowPage() int {
+	return max(1, v.vp.Height())
+}
+
+// openRowDetail pushes a scrollable COLUMN/VALUE view of the selected row so
+// its full (untruncated, multi-line) values can be read.
+func (v *SQLView) openRowDetail() tea.Cmd {
+	if v.result == nil || v.selRow >= len(v.result.Rows) {
+		return nil
+	}
+	names := make([]string, len(v.result.Columns))
+	for i, c := range v.result.Columns {
+		names[i] = c.Name
+	}
+	vals := v.result.Rows[v.selRow]
+	detail := NewRowDetail(v.th, fmt.Sprintf("row %d", v.selRow+1), names, vals)
+	return func() tea.Msg { return PushMsg{View: detail} }
 }
 
 func (v *SQLView) handlePickerKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
@@ -498,6 +546,8 @@ func (v *SQLView) buildGrid() {
 	v.gridLines = nil
 	v.gridWidth = 0
 	v.xoff = 0
+	v.selRow = 0
+	v.rowOff = 0
 	if v.result == nil {
 		return
 	}
@@ -639,27 +689,58 @@ func (v *SQLView) renderResults(width, height int) string {
 		return v.vp.View()
 	}
 
+	bodyHeight := max(1, height-1)
+	rows := v.gridLines[1:]
+
+	// Reserve a column on the right for the vertical scrollbar whenever the
+	// rows overflow the body; when everything fits, the grid keeps full width.
+	contentW := width
+	showBar := len(rows) > bodyHeight && width > 1
+	if showBar {
+		contentW = width - 1
+	}
+
 	// Pin the header line at the top; only the data rows scroll in the
 	// viewport, so the column names stay on screen as the user pages down.
-	header := ansi.Cut(v.gridLines[0], v.xoff, v.xoff+width)
+	header := ansi.Cut(v.gridLines[0], v.xoff, v.xoff+contentW)
 
-	bodyHeight := max(1, height-1)
 	if !v.vpOK {
-		v.vp = viewport.New(viewport.WithWidth(width), viewport.WithHeight(bodyHeight))
+		v.vp = viewport.New(viewport.WithWidth(contentW), viewport.WithHeight(bodyHeight))
 		v.vpOK = true
 	} else {
-		v.vp.SetWidth(width)
+		v.vp.SetWidth(contentW)
 		v.vp.SetHeight(bodyHeight)
 	}
 
-	// Apply the horizontal offset by cutting each row to the visible window.
-	rows := v.gridLines[1:]
+	// Keep the selected row within the visible body window.
+	if v.selRow < v.rowOff {
+		v.rowOff = v.selRow
+	}
+	if v.selRow >= v.rowOff+bodyHeight {
+		v.rowOff = v.selRow - bodyHeight + 1
+	}
+	v.rowOff = min(max(0, v.rowOff), max(0, len(rows)-bodyHeight))
+
+	// Apply the horizontal offset by cutting each row to the visible window,
+	// and paint the selected row as a full-width highlight bar.
+	selStyle := lipgloss.NewStyle().Reverse(true).Bold(true)
 	windowed := make([]string, len(rows))
 	for i, l := range rows {
-		windowed[i] = ansi.Cut(l, v.xoff, v.xoff+width)
+		cut := ansi.Cut(l, v.xoff, v.xoff+contentW)
+		if i == v.selRow {
+			cut = selStyle.Width(contentW).Render(ansi.Strip(cut))
+		}
+		windowed[i] = cut
 	}
 	v.vp.SetContent(strings.Join(windowed, "\n"))
-	return header + "\n" + v.vp.View()
+	v.vp.SetYOffset(v.rowOff)
+
+	body := v.vp.View()
+	if showBar {
+		bar := component.Scrollbar(v.th, bodyHeight, len(rows), bodyHeight, v.rowOff)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, body, bar)
+	}
+	return header + "\n" + body
 }
 
 func (v *SQLView) renderStatus(width int) string {
