@@ -82,12 +82,31 @@ func (t *Tabbed) CapturesKeys() bool {
 	return false
 }
 
-// Hints prepends the tab-switch keys to the active tab's hints.
+// Hints prepends the tab-switch keys to the active tab's hints. The active tab
+// may bind `tab` itself for its internal focus movement (e.g. SQLView's
+// editor/results split) — that key is folded into this unified cycle, so its
+// own `tab` hint is dropped to avoid showing two `tab` entries.
 func (t *Tabbed) Hints() []key.Binding {
 	hints := []key.Binding{
 		key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab", "switch tab")),
 	}
-	return append(hints, t.tabs[t.active].View.Hints()...)
+	for _, h := range t.tabs[t.active].View.Hints() {
+		if bindsTab(h) {
+			continue
+		}
+		hints = append(hints, h)
+	}
+	return hints
+}
+
+// bindsTab reports whether a binding is triggered by the `tab` key.
+func bindsTab(b key.Binding) bool {
+	for _, k := range b.Keys() {
+		if k == "tab" {
+			return true
+		}
+	}
+	return false
 }
 
 // Status delegates to the active tab when it reports status.
