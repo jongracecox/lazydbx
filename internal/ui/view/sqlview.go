@@ -3,6 +3,7 @@ package view
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -125,7 +126,7 @@ func NewSQLView(th theme.Theme, clients *dbx.Clients, sqlCfg config.SQLConfig, q
 	// (standalone via toggleFocus, inside a Tabbed via AdvanceFocus). Since the
 	// container owns tab now, typed keys no longer risk switching tabs.
 	ta.Focus()
-	return &SQLView{
+	v := &SQLView{
 		th:       th,
 		clients:  clients,
 		sqlCfg:   sqlCfg,
@@ -134,6 +135,44 @@ func NewSQLView(th theme.Theme, clients *dbx.Clients, sqlCfg config.SQLConfig, q
 		focus:    focusEditor,
 		autoExec: autoExec,
 	}
+	v.applyEditorStyles()
+	return v
+}
+
+// applyEditorStyles sets the theme-dependent editor styles that mark focus:
+//
+//   - the active (cursor) line is highlighted with the accent color while the
+//     editor is focused. We only set the accent foreground and drop the default
+//     dark-styles background bar, so no hardcoded color codes leak in and the
+//     terminal's own light/dark colors show through for the rest of the text;
+//   - the blurred text dulls to subtle grey (this reads fine in both modes); and
+//   - the cursor is tinted with the accent color while focused and subtle grey
+//     otherwise (Bubble Tea's textarea hides its cursor entirely while blurred,
+//     so the grey mainly guards any state where it is still drawn).
+//
+// It rebuilds from the textarea defaults each call, so it stays idempotent
+// across the focus changes that call it.
+func (v *SQLView) applyEditorStyles() {
+	st := textarea.DefaultDarkStyles()
+	dull := v.th.Subtle.GetForeground()
+	st.Focused.CursorLine = st.Focused.CursorLine.UnsetBackground().Foreground(v.th.Accent)
+	st.Blurred.Text = st.Blurred.Text.Foreground(dull)
+	st.Blurred.CursorLine = st.Blurred.CursorLine.Foreground(dull)
+	st.Cursor.Color = v.focusColor(focusEditor)
+	v.editor.SetStyles(st)
+}
+
+// selBarColor is the selected-row bar color: accent while the results pane is
+// focused, subtle grey otherwise.
+func (v *SQLView) selBarColor() color.Color { return v.focusColor(focusResults) }
+
+// focusColor returns the accent color when target currently has focus, and the
+// theme's subtle grey otherwise — the shared rule behind both focus cues.
+func (v *SQLView) focusColor(target focusTarget) color.Color {
+	if v.focus == target {
+		return v.th.Accent
+	}
+	return v.th.Subtle.GetForeground()
 }
 
 // Init loads the warehouse list (and focuses the editor for ad-hoc use).
@@ -324,6 +363,7 @@ func (v *SQLView) setFocus(f focusTarget) {
 	} else {
 		v.editor.Blur()
 	}
+	v.applyEditorStyles()
 }
 
 // toggleFocus flips between the editor and results panes. It drives tab when
@@ -722,8 +762,9 @@ func (v *SQLView) renderResults(width, height int) string {
 	v.rowOff = min(max(0, v.rowOff), max(0, len(rows)-bodyHeight))
 
 	// Apply the horizontal offset by cutting each row to the visible window,
-	// and paint the selected row as a full-width highlight bar.
-	selStyle := lipgloss.NewStyle().Reverse(true).Bold(true)
+	// and paint the selected row as a full-width highlight bar. Foreground +
+	// Reverse turns the chosen color into the background with contrasting text.
+	selStyle := lipgloss.NewStyle().Foreground(v.selBarColor()).Reverse(true).Bold(true)
 	windowed := make([]string, len(rows))
 	for i, l := range rows {
 		cut := ansi.Cut(l, v.xoff, v.xoff+contentW)

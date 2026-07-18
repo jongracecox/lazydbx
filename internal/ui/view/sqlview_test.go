@@ -344,6 +344,34 @@ func TestSQLResultsScrollbar(t *testing.T) {
 	assert.NotContains(t, small.Render(80, 24), "█", "no scrollbar when everything fits")
 }
 
+func TestSQLFocusColors(t *testing.T) {
+	v := newSQLView(t, dbx.DAOs{}, "select 1", false)
+	accent := v.th.Accent
+	grey := v.th.Subtle.GetForeground()
+
+	// Editor focused on construction: accent cursor, grey row bar.
+	assert.Equal(t, accent, v.editor.Styles().Cursor.Color, "editor cursor accent when focused")
+	assert.Equal(t, grey, v.selBarColor(), "row bar grey when results not focused")
+
+	// Focus the results: grey cursor, accent row bar.
+	v.setFocus(focusResults)
+	assert.Equal(t, grey, v.editor.Styles().Cursor.Color, "editor cursor grey when blurred")
+	assert.Equal(t, accent, v.selBarColor(), "row bar accent when results focused")
+
+	// Back to the editor: reversed again.
+	v.setFocus(focusEditor)
+	assert.Equal(t, accent, v.editor.Styles().Cursor.Color)
+	assert.Equal(t, grey, v.selBarColor())
+
+	// The active (cursor) line is highlighted with the accent color while
+	// focused; the blurred text stays dull grey. These are fixed targets on the
+	// focused/blurred style states, independent of the current focus.
+	st := v.editor.Styles()
+	assert.Equal(t, accent, st.Focused.CursorLine.GetForeground(), "focused active line is accent-highlighted")
+	assert.Equal(t, grey, st.Blurred.Text.GetForeground(), "blurred editor text is dull grey")
+	assert.Equal(t, grey, st.Blurred.CursorLine.GetForeground(), "blurred active line is dull grey")
+}
+
 // press feeds a key through handleKey and returns the concrete view.
 func press(v *SQLView, msg tea.KeyPressMsg) (*SQLView, tea.Cmd) {
 	got, cmd := v.handleKey(msg)
