@@ -4,20 +4,26 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+# Deny by default; each job grants only what it needs.
+permissions: {}
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # Manual-approval gate: a leaked credential that pushes a v* tag cannot
+    # publish a release without a human approving the `release` environment.
+    environment: release
+    permissions:
+      contents: write # goreleaser creates the GitHub Release on this repo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+          persist-credentials: false # goreleaser auths via the env tokens below
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: "~> v2"
           args: release --clean
