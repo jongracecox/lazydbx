@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -276,4 +277,75 @@ func TestSQLAutoExecOnInit(t *testing.T) {
 	_ = runCmd(t, cmd)
 	assert.True(t, submitted)
 	assert.NotContains(t, sv.Render(80, 20), "no warehouse")
+}
+
+// sqlViewWithRows returns a results-focused SQL view whose grid is built from
+// the given rows (columns id, name).
+func sqlViewWithRows(t *testing.T, rows [][]string) *SQLView {
+	t.Helper()
+	v := newSQLView(t, dbx.DAOs{}, "select 1", false)
+	v.result = &dbx.StmtResult{
+		Columns: []dbx.StmtColumn{{Name: "id"}, {Name: "name"}},
+		Rows:    rows,
+	}
+	v.state = stateSucceeded
+	v.buildGrid()
+	v.setFocus(focusResults)
+	return v
+}
+
+func TestSQLRowSelectionMovesAndClamps(t *testing.T) {
+	rows := [][]string{{"1", "a"}, {"2", "b"}, {"3", "c"}}
+	v := sqlViewWithRows(t, rows)
+	v.Render(120, 24) // establish viewport height for paging
+	require.Equal(t, 0, v.selRow)
+
+	v, _ = press(v, sqlPress("j"))
+	assert.Equal(t, 1, v.selRow, "j moves the cursor down")
+
+	v, _ = press(v, sqlPress("k"))
+	v, _ = press(v, sqlPress("k"))
+	assert.Equal(t, 0, v.selRow, "k clamps at the first row")
+
+	for range 10 {
+		v, _ = press(v, sqlPress("j"))
+	}
+	assert.Equal(t, len(rows)-1, v.selRow, "j clamps at the last row")
+}
+
+func TestSQLEnterOpensRowDetail(t *testing.T) {
+	v := sqlViewWithRows(t, [][]string{{"1", "alice"}, {"2", "bob"}})
+	v, _ = press(v, sqlPress("j"))
+	require.Equal(t, 1, v.selRow)
+
+	_, cmd := v.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	push, ok := runCmd(t, cmd).(PushMsg)
+	require.True(t, ok, "enter pushes a view")
+	rd, ok := push.View.(*RowDetail)
+	require.True(t, ok, "the pushed view is a RowDetail")
+	assert.Equal(t, "row 2", rd.Title())
+
+	out := rd.Render(120, 24)
+	assert.Contains(t, out, "name")
+	assert.Contains(t, out, "bob", "detail shows the selected row's value")
+}
+
+func TestSQLResultsScrollbar(t *testing.T) {
+	// Many rows into a short body → the vertical scrollbar shows.
+	rows := make([][]string, 50)
+	for i := range rows {
+		rows[i] = []string{strconv.Itoa(i), "v"}
+	}
+	v := sqlViewWithRows(t, rows)
+	assert.Contains(t, v.Render(80, 8), "█", "scrollbar thumb shows when rows overflow the body")
+
+	// A couple of rows into a tall body → no scrollbar.
+	small := sqlViewWithRows(t, [][]string{{"1", "a"}, {"2", "b"}})
+	assert.NotContains(t, small.Render(80, 24), "█", "no scrollbar when everything fits")
+}
+
+// press feeds a key through handleKey and returns the concrete view.
+func press(v *SQLView, msg tea.KeyPressMsg) (*SQLView, tea.Cmd) {
+	got, cmd := v.handleKey(msg)
+	return got.(*SQLView), cmd
 }
