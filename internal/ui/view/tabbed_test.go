@@ -104,35 +104,22 @@ func TestTabbedCycleThroughInternalStops(t *testing.T) {
 	assert.Equal(t, 0, tb.active, "boundary reached, retreat to the previous tab")
 }
 
-func TestTabbedBracketsSkipInternalStops(t *testing.T) {
-	th := theme.Default()
-	mid := &cyclerView{body: "mid", focus: 1}
-	tb := NewTabbed(th, "t", []Tab{
-		{Name: "one", View: NewDescribe(th, "one", map[string]string{"payload": "body-one"})},
-		{Name: "mid", View: mid},
-	}, 0)
-
-	// `]` jumps to the whole tab without touching its internal focus.
-	v, _ := tb.Update(tabKey("]"))
-	tb = v.(*Tabbed)
-	assert.Equal(t, 1, tb.active)
-	assert.Equal(t, 1, mid.focus, "brackets don't reset internal focus")
-}
-
 func TestTabbedSwitching(t *testing.T) {
 	tb := newTestTabbed(t)
 	assert.Contains(t, tb.Render(80, 20), "body-one", "first tab active")
 
-	v, _ := tb.Update(tabKey("]"))
+	shiftTab := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+
+	v, _ := tb.Update(tabKey("tab"))
 	tb = v.(*Tabbed)
 	assert.Contains(t, tb.Render(80, 20), "body-two")
 
-	v, _ = tb.Update(tabKey("["))
+	v, _ = tb.Update(shiftTab)
 	tb = v.(*Tabbed)
 	assert.Contains(t, tb.Render(80, 20), "body-one")
 
 	// Wraps around backwards.
-	v, _ = tb.Update(tabKey("["))
+	v, _ = tb.Update(shiftTab)
 	tb = v.(*Tabbed)
 	assert.Contains(t, tb.Render(80, 20), "body-three")
 }
@@ -150,5 +137,5 @@ func TestTabbedTitleAndHints(t *testing.T) {
 	tb := newTestTabbed(t)
 	assert.Equal(t, "events", tb.Title())
 	require.NotEmpty(t, tb.Hints())
-	assert.Equal(t, "[/]", tb.Hints()[0].Help().Key)
+	assert.Equal(t, "tab", tb.Hints()[0].Help().Key)
 }

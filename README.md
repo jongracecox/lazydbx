@@ -39,6 +39,29 @@ brew install jongracecox/tap/lazydbx   # once first release is tagged
 go install github.com/jongracecox/lazydbx/cmd/lazydbx@latest
 ```
 
+### Shell completion (optional)
+
+lazydbx ships completion for bash, zsh, and fish. It completes resource names,
+flag values (`--tab`, `--profile`, `--log-level`), and — once a profile
+resolves — scope args and item names straight from your workspace (served from
+the local cache, so it never blocks on the network).
+
+Print the script for your shell with `lazydbx completion <shell>` and load it
+however your shell expects:
+
+```bash
+# bash — add to ~/.bashrc (needs bash-completion installed)
+source <(lazydbx completion bash)
+
+# zsh — write to a dir on your $fpath, e.g. with oh-my-zsh:
+lazydbx completion zsh > "${fpath[1]}/_lazydbx"
+
+# fish
+lazydbx completion fish > ~/.config/fish/completions/lazydbx.fish
+```
+
+Run `lazydbx completion <shell> --help` for the per-shell details.
+
 ## Usage
 
 lazydbx uses your existing [Databricks config
