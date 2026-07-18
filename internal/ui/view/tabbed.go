@@ -85,7 +85,7 @@ func (t *Tabbed) CapturesKeys() bool {
 // Hints prepends the tab-switch keys to the active tab's hints.
 func (t *Tabbed) Hints() []key.Binding {
 	hints := []key.Binding{
-		key.NewBinding(key.WithKeys("[", "]", "tab", "shift+tab"), key.WithHelp("[/]", "switch tab")),
+		key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab", "switch tab")),
 	}
 	return append(hints, t.tabs[t.active].View.Hints()...)
 }
@@ -98,10 +98,8 @@ func (t *Tabbed) Status(now time.Time) string {
 	return ""
 }
 
-// Update cycles focus on tab/shift+tab, jumps whole tabs on [/] (unless the
-// active tab captures keys, so the bracket keys stay literal while typing), and
-// otherwise routes: key messages to the active tab, everything else to all tabs
-// so inactive ones stay live.
+// Update cycles focus on tab/shift+tab, and otherwise routes: key messages to
+// the active tab, everything else to all tabs so inactive ones stay live.
 func (t *Tabbed) Update(msg tea.Msg) (View, tea.Cmd) {
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch kmsg.String() {
@@ -111,16 +109,6 @@ func (t *Tabbed) Update(msg tea.Msg) (View, tea.Cmd) {
 		case "shift+tab":
 			t.cycle(false)
 			return t, nil
-		case "]":
-			if !t.CapturesKeys() {
-				t.switchTab(true)
-				return t, nil
-			}
-		case "[":
-			if !t.CapturesKeys() {
-				t.switchTab(false)
-				return t, nil
-			}
 		}
 		v, cmd := t.tabs[t.active].View.Update(msg)
 		t.tabs[t.active].View = v
