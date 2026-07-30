@@ -49,7 +49,7 @@ func (UpdatesDef) Actions() []resource.Action {
 			Key:      "l",
 			Name:     "events",
 			NeedsRow: true,
-			Run: func(_ context.Context, c *dbx.Clients, scope resource.Scope, _ resource.Row) any {
+			Run: func(_ context.Context, c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 				pipelineID := scope["pipeline"]
 				return view.OpenLogMsg{
 					Title:  "events/" + pipelineID,
@@ -61,6 +61,7 @@ func (UpdatesDef) Actions() []resource.Action {
 						}
 						return dao.Events(ctx, pipelineID, pipelineEventsLimit)
 					},
+					Web: pipelineUpdateLink(c.Profile().Host, pipelineID, row.ID),
 				}
 			},
 		},
@@ -81,6 +82,8 @@ func (UpdatesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Ro
 	}
 	return view.OpenTabsMsg{
 		Title: title,
+		// Both tabs link to this update's page in the pipeline UI.
+		Web: pipelineUpdateLink(c.Profile().Host, pipelineID, row.ID),
 		Tabs: []view.TabSpec{
 			{Name: "events", Log: &view.LogTabSpec{
 				Fetch: func(ctx context.Context) (string, error) {

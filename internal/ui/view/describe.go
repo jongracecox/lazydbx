@@ -13,6 +13,8 @@ import (
 
 // Describe renders any detail object as scrollable YAML.
 type Describe struct {
+	webLink
+
 	th    theme.Theme
 	title string
 	body  string
@@ -64,9 +66,9 @@ func (d *Describe) Title() string { return d.title }
 
 // Hints implements View.
 func (d *Describe) Hints() []key.Binding {
-	return []key.Binding{
+	return append([]key.Binding{
 		key.NewBinding(key.WithKeys("j"), key.WithHelp("j/k", "scroll")),
-	}
+	}, d.webHints()...)
 }
 
 // Update scrolls the viewport.
@@ -82,8 +84,15 @@ func (d *Describe) Update(msg tea.Msg) (View, tea.Cmd) {
 		}
 		return d, nil
 	}
-	if kmsg, ok := msg.(tea.KeyPressMsg); ok && kmsg.String() == "esc" {
-		return d, func() tea.Msg { return PopMsg{} }
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch kmsg.String() {
+		case "esc":
+			return d, func() tea.Msg { return PopMsg{} }
+		case "o":
+			if cmd := d.openWeb(); cmd != nil {
+				return d, cmd
+			}
+		}
 	}
 	var cmd tea.Cmd
 	d.vp, cmd = d.vp.Update(msg)

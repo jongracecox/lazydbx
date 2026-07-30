@@ -102,7 +102,24 @@ Dependency direction: `cmd → app → ui/view → resource ← resources → db
 - v2 API: `View() tea.View` (set `v.AltScreen = true` in the view, not a program option); `lipgloss.Color(...)` is a constructor returning `color.Color`, not a type; keys match via `tea.KeyPressMsg.String()` (e.g. `"ctrl+r"`).
 - `ctrl+c` is reserved for quit (with confirm when work is in flight). SQL execute = `ctrl+e`, cancel = `ctrl+k`.
 - Data viewer (`SQLView` results grid): the header line is **pinned** — `gridLines[0]` renders as a static line above the viewport; only `gridLines[1:]` (data rows) scroll (`renderResults`). Vertical keys move a **row cursor** (`selRow`, kept in view via `rowOff`/`SetYOffset`, highlighted with `Reverse(true).Bold(true)`), not the raw viewport: `j/k`+arrows = one row, `pgup/pgdn` = one page. Horizontal: `h/l`+arrows step `hStep` (6) cols, `home/end` page a near-screen width (`hPage`), all via `xoff` + `ansi.Cut`. `enter` pushes `view.RowDetail` — a scrollable COLUMN/VALUE list showing the selected row's full, untruncated, wrapped values (the grid truncates cells at `maxCell`). `esc` pops back. Both the grid body and `RowDetail` reserve a right-hand column for `component.Scrollbar` (shaded `█`/`░` bar) when content overflows — a pure formatter over viewport metrics (`TotalLineCount`/`VisibleLineCount`/`YOffset`); reuse it for any viewport-backed view.
-- Reserved single keys (do not bind in def Actions): global `q p a ? : J C P A`, browser `d s f t r j k o O /` (j/k = navigation, tab/shift+tab = cycle tabs *and* any internal focus stops (see the tab-conflict note below), `o` = open in browser when the def implements `resource.WebLinker`, `O` = secondary web link when it implements `resource.AltWebLinker` — apps use `o` for the workspace page and `O` for the deployed app). `a` opens the About splash (`view.About`: centred logo, build metadata, project URL, copyright), `?` opens help. Check `?` help for the live map.
+- Reserved single keys (do not bind in def Actions): global `q p a ? : J C P A`, browser `d s f t r j k o O /` (j/k = navigation, tab/shift+tab = cycle tabs *and* any internal focus stops (see the tab-conflict note below), `o` = open in browser when the def implements `resource.WebLinker`, `O` = secondary web link when it implements `resource.AltWebLinker` — apps use `o` for the workspace page and `O` for the deployed app; detail screens
+also bind `o` — see the `view.WebLink` note below). `a` opens the About splash (`view.About`: centred logo, build metadata, project URL, copyright), `?` opens help. Check `?` help for the live map.
+- **`o` on detail screens (`view.WebLink`):** the Browser derives `o` per row from
+  `resource.WebLinker`, but detail screens (`Describe`, `LogView`, `LogTable`,
+  `SQLView`) have no def to ask, so whoever opens them supplies the URL. They embed
+  the `webLink` mixin (`internal/ui/view/weblink.go`) which owns the key, the hint,
+  and the "no URL → leave `o` unbound" rule; the opening message carries it —
+  `OpenLogMsg/OpenLogTableMsg/OpenSQLMsg.Web`, and `OpenTabsMsg.Web` as the default
+  every tab inherits unless its `TabSpec.Web` overrides (tables: table page for the
+  details tab, `?activeTab=sampleData` for the data tab; apps: workspace page for
+  details, the app's own `/logz` for logs). `app.withWebLink` attaches it at
+  construction via `view.WebLinkSetter`; `Browser.describeRow` passes the row's own
+  link through so `d` then `o` matches `o` from the list. Build links with the
+  helpers in `internal/resources/weburl.go` (`tableLink`, `jobRunLink`,
+  `pipelineUpdateLink`, `appLogsLink`, …) — they take the `(url, ok)` pair straight
+  through, so an unknown host silently means "no link". Exception: `SQLView` binds
+  `o` only with the **results** focused — with the editor focused `o` is a typed
+  character.
 - **Navigation best practice — resolving `tab` conflicts:** when a view inside a `Tabbed` container also wants `tab` for its own focus movement (e.g. `SQLView`'s editor↔results split), do NOT let the two fight over the key. Instead fold the view's internal focus stops into the global cycle: implement `view.TabCycler` (`AdvanceFocus(forward)` moves internal focus and returns `true`, or `false` at its boundary so the container switches tabs; `EnterFocus(forward)` lands on the entry stop when the cycle arrives). `Tabbed.cycle` walks columns → data-editor → data-results → details on `tab` and reverses on `shift+tab` (this is the only tab-switch key — `[`/`]` are *not* bound). A view keeps its own `tab` handler only for standalone (non-tabbed) use, e.g. `SQLView` via `OpenSQLMsg`. Apply the same pattern to any future screen with a `tab`-key conflict.
 - teatest goldens: pin terminal size and color profile in `TestMain`, inject the clock for "Ns ago" badges; `.gitattributes` marks `*.golden -text`.
 - Rate limits: workspace SCIM ≈4 req/s (identity resources use 15m poll + manual refresh), jobs list 20/s. Respect per-resource `PollInterval()`.

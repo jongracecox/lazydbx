@@ -64,6 +64,9 @@ type ProfileColorSelectedMsg struct {
 type OpenSQLMsg struct {
 	Query   string
 	Execute bool
+	// Web is the workspace page this query corresponds to (e.g. a table's sample
+	// data), bound to `o` with the results focused. Zero = no link.
+	Web WebLink
 }
 
 // TabSpec declares one tab of an OpenTabsMsg without constructing the view
@@ -71,6 +74,9 @@ type OpenSQLMsg struct {
 // field must be set.
 type TabSpec struct {
 	Name string
+	// Web overrides OpenTabsMsg.Web for this tab (e.g. a table's data tab links
+	// to the sample-data page while its details tab links to the table page).
+	Web WebLink
 	// Log shows a log viewer over the fetched text.
 	Log *LogTabSpec
 	// LogTable shows the structured, selectable log-record table.
@@ -129,6 +135,8 @@ type OpenTabsMsg struct {
 	// opens the first tab. The browser sets it when a CLI `--tab` launch asks
 	// to land on a specific tab; normal Enter leaves it zero.
 	Active int
+	// Web is the `o` out-link every tab inherits unless it sets its own.
+	Web WebLink
 }
 
 // OpenURLMsg asks the app to open a URL in the system web browser — how
@@ -144,6 +152,8 @@ type OpenLogMsg struct {
 	Title  string
 	Follow bool // start with follow-tail enabled (for in-flight runs)
 	Fetch  func(ctx context.Context) (string, error)
+	// Web is the workspace page these logs belong to, bound to `o`.
+	Web WebLink
 }
 
 // OpenLogTableMsg asks the app to open the structured log-record table. Fetch
@@ -153,4 +163,6 @@ type OpenLogTableMsg struct {
 	Title  string
 	Follow bool
 	Fetch  func(ctx context.Context) ([]LogRecord, error)
+	// Web is the workspace page these logs belong to, bound to `o`.
+	Web WebLink
 }

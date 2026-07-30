@@ -198,6 +198,30 @@ func TestBrowserOpenWeb(t *testing.T) {
 	assert.Contains(t, open.URL, "my-app")
 }
 
+func TestBrowserDescribeCarriesWebLink(t *testing.T) {
+	b := newTestBrowser(webDef{crumbDef: crumbDef{name: "jobs", cols: col()}, ok: true}, resource.Scope{})
+	withRows(t, b, "42")
+
+	_, cmd := b.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	require.NotNil(t, cmd)
+	push, ok := cmd().(PushMsg)
+	require.True(t, ok)
+	d, ok := push.View.(*Describe)
+	require.True(t, ok)
+	assert.Equal(t, "https://example/42", d.link.URL, "`d` then `o` opens the row's page")
+}
+
+func TestBrowserDescribeWithoutWebLink(t *testing.T) {
+	b := newTestBrowser(crumbDef{name: "jobs", cols: col()}, resource.Scope{})
+	withRows(t, b, "42")
+
+	_, cmd := b.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	require.NotNil(t, cmd)
+	push, ok := cmd().(PushMsg)
+	require.True(t, ok)
+	assert.Empty(t, push.View.(*Describe).link.URL, "a def with no WebLinker leaves `o` unbound")
+}
+
 func TestBrowserOpenWebNoLink(t *testing.T) {
 	b := newTestBrowser(webDef{crumbDef: crumbDef{name: "apps", cols: col()}, ok: false}, resource.Scope{})
 	withRows(t, b, "my-app")

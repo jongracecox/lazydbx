@@ -65,6 +65,7 @@ func (PipelinesDef) Actions() []resource.Action {
 						}
 						return dao.Events(ctx, p.ID, pipelineEventsLimit)
 					},
+					Web: pipelineLink(c.Profile().Host, p.ID),
 				}
 			},
 		},

@@ -41,8 +41,12 @@ func (TablesDef) Actions() []resource.Action {
 			Key:      "x",
 			Name:     "query",
 			NeedsRow: true,
-			Run: func(_ context.Context, _ *dbx.Clients, scope resource.Scope, row resource.Row) any {
-				return view.OpenSQLMsg{Query: previewQuery(scope, row.ID), Execute: false}
+			Run: func(_ context.Context, c *dbx.Clients, scope resource.Scope, row resource.Row) any {
+				return view.OpenSQLMsg{
+					Query:   previewQuery(scope, row.ID),
+					Execute: false,
+					Web:     tableSampleDataLink(c.Profile().Host, scope["catalog"], scope["schema"], row.ID),
+				}
 			},
 		},
 	}
@@ -55,11 +59,19 @@ func (TablesDef) Tabs() []string { return []string{"columns", "data", "details"}
 // (columns │ data │ details) instead of a plain child drill-down.
 func (TablesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 	catalog, schema, table := scope["catalog"], scope["schema"], row.ID
+	host := c.Profile().Host
 	return view.OpenTabsMsg{
 		Title: table,
+		// Every tab links to the table's Catalog Explorer page; the data tab
+		// overrides that with the Sample Data tab of the same page.
+		Web: tableLink(host, catalog, schema, table),
 		Tabs: []view.TabSpec{
 			{Name: "columns", Browse: &view.BrowseTabSpec{Resource: "columns", Scope: scope.Merge("table", table)}},
-			{Name: "data", SQL: &view.SQLTabSpec{Query: previewQuery(scope, table), Execute: true}},
+			{
+				Name: "data",
+				SQL:  &view.SQLTabSpec{Query: previewQuery(scope, table), Execute: true},
+				Web:  tableSampleDataLink(host, catalog, schema, table),
+			},
 			{Name: "details", Detail: func(ctx context.Context) (any, error) {
 				dao, err := c.Tables()
 				if err != nil {

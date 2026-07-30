@@ -37,6 +37,8 @@ const (
 // tail scrolls predictably: the highlight moves within the page and only scrolls
 // when it would leave the top or bottom edge.
 type LogTable struct {
+	webLink
+
 	th    theme.Theme
 	title string
 	fetch func(ctx context.Context) ([]LogRecord, error)
@@ -111,13 +113,13 @@ func (v *LogTable) Hints() []key.Binding {
 	if v.follow {
 		followHelp = "follow(on " + fmtFollowInterval(v.followInterval) + ")"
 	}
-	return []key.Binding{
+	return append([]key.Binding{
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", followHelp)),
 		key.NewBinding(key.WithKeys("+"), key.WithHelp("+/-", "poll interval")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-	}
+	}, v.webHints()...)
 }
 
 // Update routes lifecycle messages first, then keys.
@@ -158,6 +160,10 @@ func (v *LogTable) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "enter":
 		cmd := v.expandSelected()
 		return v, cmd
+	case "o":
+		if cmd := v.openWeb(); cmd != nil {
+			return v, cmd
+		}
 	case "esc":
 		if v.filterQuery != "" {
 			v.filterQuery = ""

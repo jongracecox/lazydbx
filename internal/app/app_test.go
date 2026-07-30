@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
@@ -303,6 +304,47 @@ func TestOpenTabsMsg(t *testing.T) {
 		},
 	})
 	assert.Equal(t, "run-1", topTitle(m))
+}
+
+// TestOpenViewsCarryWebLinks checks the wiring that binds `o` on the detail
+// views: the message-level link reaches a standalone view, and a tab's own link
+// wins over the message's fallback.
+func TestOpenViewsCarryWebLinks(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
+
+	m = update(m, view.OpenLogMsg{
+		Title: "logs",
+		Fetch: func(context.Context) (string, error) { return "", nil },
+		Web:   view.WebLink{URL: "https://ws/jobs/1/runs/2", Hint: "open run"},
+	})
+	assert.Contains(t, hintKeys(m.top().Hints()), "o", "the log view links out")
+
+	m = update(m, view.OpenTabsMsg{
+		Title: "events",
+		Web:   view.WebLink{URL: "https://ws/explore/data/main/silver/t"},
+		Tabs: []view.TabSpec{
+			{
+				Name: "data", SQL: &view.SQLTabSpec{Query: "select 1"},
+				Web: view.WebLink{URL: "https://ws/explore/data/main/silver/t?activeTab=sampleData"},
+			},
+			{Name: "details", Detail: func(context.Context) (any, error) { return "x", nil }},
+		},
+	})
+	tabbed, ok := m.top().(*view.Tabbed)
+	require.True(t, ok)
+	// The details tab inherits the message link; the SQL tab has its own but only
+	// shows the hint with its results focused, so assert via the details tab.
+	_, _ = tabbed.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	_, _ = tabbed.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	assert.Contains(t, hintKeys(tabbed.Hints()), "o", "tabs inherit the subject's link")
+}
+
+func hintKeys(binds []key.Binding) []string {
+	out := make([]string, len(binds))
+	for i, b := range binds {
+		out[i] = b.Help().Key
+	}
+	return out
 }
 
 func TestOpenTabsMsgEmptyIsNoop(t *testing.T) {
