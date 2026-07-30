@@ -127,4 +127,37 @@ also bind `o` — see the `view.WebLink` note below). `a` opens the About splash
 - App logs have no SDK call: they stream over a WebSocket at `<App.Url>/logz/stream` on the app's own host (not the workspace host; `/logz` itself is just the HTML viewer). `appsDAO.GetLogs` is the one sanctioned raw authenticated connection in `dbx` — it dials with `golang.org/x/net/websocket`, copies auth headers from `w.Config.Authenticate`, sends the search filter (empty = all logs, required before the server streams), then drains `{timestamp,source,severity,message}` frames (timestamp is epoch **seconds**, not ISO) into `[]AppLogEntry` until an idle gap (a lone NUL byte = "no logs"). App hosts may require app-scoped OAuth, so a plain PAT can be rejected — the error surfaces to the viewer.
 - App logs render in `view.LogTable` (not the plain `LogView`): a `component.Table`-based record list — one collapsed line per record (TIME/SEV/MESSAGE), severity-colored, `/` filters the *full* record (not just the truncated cell), `enter` expands the selected record to pretty JSON, `s` sorts, `f`/`+`/`-` drive follow. The severity color falls back to a level word detected at the start of the message when the structured `severity` is `UNKNOWN`. The apps `l` action emits `view.OpenLogTableMsg`; the Enter tab uses `LogTableTabSpec`.
 - Profile highlight colors: there is **no prod auto-detection** — the UI is always the orange theme. A user opts a profile into a colored header by pressing `c` on the profile picker (`view.ColorPicker`), which writes an exact-name entry to config `skins:` (`config.SaveSkin`, the only code that writes config back to disk; it touches only the `skins` map and drops YAML comments). `skins:` maps profile-name globs → a color name from `theme.accents`; the color is the **background** of a name+host chip in the header (`theme.HighlightColor`, resolved in `app.View`; foreground picked by `theme.Contrast` for legibility on any accent), leaving the rest of the UI on the default accent. Config records its source path (`Config.path`) so SaveSkin writes back to the file it was loaded from.
+- Table view tabs are `columns │ data │ details │ properties` (`--tab` accepts all
+  four). Each pane owns one thing: the **details** tab renders a `tableSummary`
+  (catalog/schema + the `dbx.Table` fields + *counts* of columns and properties),
+  deliberately **not** the raw `dbx.TableDetail` — the columns list and the
+  properties map would bury it (UC returns a `spark.sql.statistics.colStats.*`
+  entry per column per statistic: 723 properties on one real gold table, 712 of
+  them generated). The **properties** tab is a `view.Tree` over
+  `resources.propTree`, which splits the dotted keys into a trie (`delta.feature.
+  appendOnly` → delta → feature → appendOnly) so that whole generated block
+  collapses to one `▸ spark: {712}` line and sorts last. `d` on a table *row*
+  still dumps the whole `TableDetail` as the raw escape hatch.
+- Epoch timestamps in properties get a `TreeNode.Note` gloss — `lastCommitTimestamp:
+  1785273330000 (2026-07-28 16:15:30.000)`, raw value kept, note greyed. Nothing
+  proves an integer is a time, so `resources.epochNote` needs **both** halves of
+  the guess: the name reads like a time (`_at`/`At` suffix — not a bare "at",
+  which would match "format" — or contains created/updated/modified/deleted/
+  expire/timestamp/time/date) **and** the digit count maps to a precision
+  (10=s, 13=ms, 16=µs, 19=ns) that lands in 2000–2100. So `lastUpdateVersion:
+  6215` and `deltaFileStatistics: \`load_date\`` stay untouched. Keep the
+  heuristic in `resources` (property semantics), not in `view.Tree`.
+- `view.Tree` is the generic collapsible tree (jless-style), reusable for any
+  nested key/value data — declare a tab with `TabSpec.Tree` (`TreeTabSpec.Fetch`
+  returns `[]view.TreeNode`; the app builds it via `NewLazyTree`) or construct it
+  directly with `NewTree`. It opens **fully expanded**; `left/h` collapses (or
+  jumps to the parent on a leaf / already-closed branch), `right/l` expands (or
+  steps into an open one), `-`/`+` fold and unfold everything, `enter` toggles a
+  branch and pushes a `RowDetail` with the full untruncated value on a leaf, `/`
+  filters paths *and* values (survivors keep their ancestors and their whole
+  subtree, and collapse state is ignored while filtering so a hit can't hide
+  inside a closed branch). The forest is flattened into `[]treeItem` once on load
+  — collapse and filter only recompute `visible`, keyed by dotted path so the
+  cursor sticks to its node across both. Producers own the nesting (dotted keys,
+  JSON, …); the view owns state and rendering.
 - CLI launch item selection: a trailing positional beyond a resource's scope args is `Command.Item` — the row to open directly (`apps my-app`, `jobs 'Nightly ETL'`, `tables main.silver orders`). `/text` is still the list pre-filter, distinct from Item. Auto-open matches Item against `Row.ID` or `resource.RowNamer.RowName` (jobs match by name; Row.ID is numeric). Two trailing positionals = error.
