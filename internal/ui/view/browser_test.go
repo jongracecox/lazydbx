@@ -280,8 +280,8 @@ func TestBrowserTitleAndScopePath(t *testing.T) {
 		{
 			name:      "scoped view titled by selected item",
 			def:       crumbDef{name: "schemas", args: []string{"catalog"}},
-			scope:     resource.Scope{"catalog": "qsic_internal"},
-			wantTitle: "qsic_internal",
+			scope:     resource.Scope{"catalog": "analytics_internal"},
+			wantTitle: "analytics_internal",
 		},
 		{
 			name:      "deep scope titled by deepest item",

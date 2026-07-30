@@ -140,7 +140,7 @@ func (b *Browser) Init() tea.Cmd {
 func (b *Browser) Close() { b.eng.Unwatch(b.key) }
 
 // Title is the breadcrumb segment: the item selected to reach this view
-// (e.g. drilling into catalog qsic_internal gives "qsic_internal"), or the
+// (e.g. drilling into catalog analytics_internal gives "analytics_internal"), or the
 // resource name at the root. Full context lives in the header's scope path.
 func (b *Browser) Title() string {
 	args := b.def.Args()
