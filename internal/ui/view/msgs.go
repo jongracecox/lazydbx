@@ -87,6 +87,28 @@ type TabSpec struct {
 	Browse *BrowseTabSpec
 	// SQL shows the SQL editor/preview.
 	SQL *SQLTabSpec
+	// Tree shows a collapsible tree.
+	Tree *TreeTabSpec
+}
+
+// TreeNode is one node of a collapsible tree (view.Tree). A node with children
+// is a branch; one without is a leaf holding Value. Both may be set — a branch
+// that also carries its own value renders it inline. Producers build the forest
+// from whatever nests naturally (dotted property keys, nested JSON); the view
+// owns collapse state, filtering, and rendering.
+type TreeNode struct {
+	Label string
+	Value string
+	// Note is an optional gloss on Value, rendered subtly in parentheses after
+	// it (e.g. the human-readable form of an epoch timestamp). The raw value is
+	// always shown as-is; producers own any interpretation of it.
+	Note     string
+	Children []TreeNode
+}
+
+// TreeTabSpec parameterizes a collapsible tree tab. Fetch runs once on Init.
+type TreeTabSpec struct {
+	Fetch func(ctx context.Context) ([]TreeNode, error)
 }
 
 // LogRecord is one structured log entry rendered by the log-record table: a

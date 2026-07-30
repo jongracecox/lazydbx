@@ -234,6 +234,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewLazyDescribe(m.th, msg.Title, spec.Detail), link)})
 			case spec.SQL != nil:
 				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewSQLView(m.th, m.clients, m.cfg.SQL, spec.SQL.Query, spec.SQL.Execute), link)})
+			case spec.Tree != nil:
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewLazyTree(m.th, msg.Title, spec.Tree.Fetch), link)})
 			case spec.Browse != nil:
 				// A browser derives `o` per row from its def, so it keeps its own.
 				if def, ok := m.registry.Get(spec.Browse.Resource); ok {
