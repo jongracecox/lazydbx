@@ -53,7 +53,19 @@ func (TablesDef) Actions() []resource.Action {
 }
 
 // Tabs implements resource.Tabber: the tab names EnterMsg produces, in order.
-func (TablesDef) Tabs() []string { return []string{"columns", "data", "details"} }
+func (TablesDef) Tabs() []string { return []string{"columns", "data", "details", "properties"} }
+
+// tableSummary is the details tab's payload: the table's own fields plus where
+// it lives and how much it holds. The columns list and the properties map have
+// their own tabs, so they are deliberately left out — the details tab stays a
+// screenful rather than a thousand-line dump.
+type tableSummary struct {
+	Catalog    string `yaml:"catalog" json:"catalog"`
+	Schema     string `yaml:"schema" json:"schema"`
+	dbx.Table  `yaml:",inline" json:"table"`
+	Columns    int `yaml:"columns" json:"columns"`
+	Properties int `yaml:"properties" json:"properties"`
+}
 
 // EnterMsg implements resource.Opener: Enter opens the tabbed table view
 // (columns │ data │ details) instead of a plain child drill-down.
@@ -77,7 +89,30 @@ func (TablesDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row
 				if err != nil {
 					return nil, err
 				}
-				return dao.Get(ctx, catalog, schema, table)
+				detail, err := dao.Get(ctx, catalog, schema, table)
+				if err != nil {
+					return nil, err
+				}
+				return tableSummary{
+					Catalog:    catalog,
+					Schema:     schema,
+					Table:      detail.Table,
+					Columns:    len(detail.Columns),
+					Properties: len(detail.Properties),
+				}, nil
+			}},
+			{Name: "properties", Tree: &view.TreeTabSpec{
+				Fetch: func(ctx context.Context) ([]view.TreeNode, error) {
+					dao, err := c.Tables()
+					if err != nil {
+						return nil, err
+					}
+					detail, err := dao.Get(ctx, catalog, schema, table)
+					if err != nil {
+						return nil, err
+					}
+					return propTree(detail.Properties), nil
+				},
 			}},
 		},
 	}
