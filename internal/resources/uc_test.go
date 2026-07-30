@@ -97,14 +97,17 @@ func TestTablesDefQueryAction(t *testing.T) {
 	actions := TablesDef{}.Actions()
 	require.Len(t, actions, 1)
 
+	c := dbx.NewClientsWithDAOs(dbx.Profile{Name: "test", Host: "https://ws"}, dbx.DAOs{})
 	query := actions[0]
 	assert.Equal(t, "x", query.Key)
 	assert.True(t, query.NeedsRow)
-	msg := query.Run(context.Background(), nil, scope, resource.Row{ID: "events"})
+	msg := query.Run(context.Background(), c, scope, resource.Row{ID: "events"})
 	open, ok := msg.(view.OpenSQLMsg)
 	require.True(t, ok)
 	assert.Equal(t, "SELECT * FROM `main`.`silver`.`events` LIMIT 200", open.Query)
 	assert.False(t, open.Execute, "query opens the editor without executing")
+	assert.Equal(t, "https://ws/explore/data/main/silver/events?activeTab=sampleData", open.Web.URL,
+		"`o` on the preview opens the table's sample data")
 }
 
 func TestTablesDefEnterOpensTabbedView(t *testing.T) {

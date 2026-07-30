@@ -54,7 +54,7 @@ func (TaskRunsDef) Actions() []resource.Action {
 			Key:      "l",
 			Name:     "logs",
 			NeedsRow: true,
-			Run: func(_ context.Context, c *dbx.Clients, _ resource.Scope, row resource.Row) any {
+			Run: func(_ context.Context, c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 				task := row.Data.(dbx.TaskRun)
 				return view.OpenLogMsg{
 					Title:  "logs/" + task.Key,
@@ -66,6 +66,7 @@ func (TaskRunsDef) Actions() []resource.Action {
 						}
 						return dao.GetRunOutput(ctx, task.RunID)
 					},
+					Web: jobRunLink(c.Profile().Host, scope["job"], scope["run"]),
 				}
 			},
 		},
@@ -77,13 +78,15 @@ func (TaskRunsDef) Tabs() []string { return []string{"logs", "details"} }
 
 // EnterMsg implements resource.Opener: selecting a task run opens tabs —
 // its logs beside its metadata — instead of bare describe.
-func (TaskRunsDef) EnterMsg(c *dbx.Clients, _ resource.Scope, row resource.Row) any {
+func (TaskRunsDef) EnterMsg(c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 	task, ok := row.Data.(dbx.TaskRun)
 	if !ok {
 		return view.FlashMsg{Level: view.FlashWarn, Text: "task details unavailable (stale cache) — refresh with r"}
 	}
 	return view.OpenTabsMsg{
 		Title: task.Key,
+		// Both tabs link to the parent run's page — tasks have no page of their own.
+		Web: jobRunLink(c.Profile().Host, scope["job"], scope["run"]),
 		Tabs: []view.TabSpec{
 			{Name: "logs", Log: &view.LogTabSpec{
 				Follow: isRunningState(task.State),

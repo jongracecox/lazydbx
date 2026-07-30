@@ -26,6 +26,8 @@ import (
 // happens inside tea.Cmds; Update stays pure and drives the lifecycle through
 // the private messages at the bottom of this file.
 type LogView struct {
+	webLink
+
 	th    theme.Theme
 	title string
 	fetch func(ctx context.Context) (string, error)
@@ -119,7 +121,7 @@ func (v *LogView) Hints() []key.Binding {
 	if v.wrap {
 		wrapHelp = "wrap(on)"
 	}
-	return []key.Binding{
+	return append([]key.Binding{
 		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", followHelp)),
 		key.NewBinding(key.WithKeys("+"), key.WithHelp("+/-", "poll interval")),
 		key.NewBinding(key.WithKeys("w"), key.WithHelp("w", wrapHelp)),
@@ -127,7 +129,7 @@ func (v *LogView) Hints() []key.Binding {
 		key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl-s", "save")),
-	}
+	}, v.webHints()...)
 }
 
 // Update routes lifecycle messages first, then keys.
@@ -193,6 +195,11 @@ func (v *LogView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "ctrl+s":
 		cmd := v.save()
 		return v, cmd
+	case "o":
+		if cmd := v.openWeb(); cmd != nil {
+			return v, cmd
+		}
+		return v, nil
 	case "esc":
 		if v.searchQuery != "" {
 			v.searchQuery = ""

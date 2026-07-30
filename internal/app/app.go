@@ -205,30 +205,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case view.OpenSQLMsg:
-		return m.push(view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, msg.Execute))
+		return m.push(withWebLink(view.NewSQLView(m.th, m.clients, m.cfg.SQL, msg.Query, msg.Execute), msg.Web))
 
 	case view.OpenURLMsg:
 		return m, openURLCmd(msg.URL)
 
 	case view.OpenLogMsg:
-		return m.push(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow))
+		return m.push(withWebLink(view.NewLogView(m.th, msg.Title, msg.Fetch, msg.Follow), msg.Web))
 
 	case view.OpenLogTableMsg:
-		return m.push(view.NewLogTable(m.th, msg.Title, msg.Fetch, msg.Follow))
+		return m.push(withWebLink(view.NewLogTable(m.th, msg.Title, msg.Fetch, msg.Follow), msg.Web))
 
 	case view.OpenTabsMsg:
 		tabs := make([]view.Tab, 0, len(msg.Tabs))
 		for _, spec := range msg.Tabs {
+			// A tab links out to its own page when it declares one, else it
+			// inherits the subject's page from the message.
+			link := spec.Web
+			if link.URL == "" {
+				link = msg.Web
+			}
 			switch {
 			case spec.Log != nil:
-				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLogView(m.th, spec.Name, spec.Log.Fetch, spec.Log.Follow)})
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewLogView(m.th, spec.Name, spec.Log.Fetch, spec.Log.Follow), link)})
 			case spec.LogTable != nil:
-				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLogTable(m.th, spec.Name, spec.LogTable.Fetch, spec.LogTable.Follow)})
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewLogTable(m.th, spec.Name, spec.LogTable.Fetch, spec.LogTable.Follow), link)})
 			case spec.Detail != nil:
-				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewLazyDescribe(m.th, msg.Title, spec.Detail)})
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewLazyDescribe(m.th, msg.Title, spec.Detail), link)})
 			case spec.SQL != nil:
-				tabs = append(tabs, view.Tab{Name: spec.Name, View: view.NewSQLView(m.th, m.clients, m.cfg.SQL, spec.SQL.Query, spec.SQL.Execute)})
+				tabs = append(tabs, view.Tab{Name: spec.Name, View: withWebLink(view.NewSQLView(m.th, m.clients, m.cfg.SQL, spec.SQL.Query, spec.SQL.Execute), link)})
 			case spec.Browse != nil:
+				// A browser derives `o` per row from its def, so it keeps its own.
 				if def, ok := m.registry.Get(spec.Browse.Resource); ok {
 					tabs = append(tabs, view.Tab{Name: spec.Name, View: m.newBrowser(def, spec.Browse.Scope, "")})
 				}
@@ -266,6 +273,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.forward(msg)
+}
+
+// withWebLink attaches an `o` out-link to a freshly built view (when the link
+// is non-empty) and returns it, so construction stays a one-liner at each call
+// site. Generic over the concrete view type to keep it assignable to view.Tab.
+func withWebLink[V view.WebLinkSetter](v V, link view.WebLink) V {
+	if link.URL != "" {
+		v.SetWebLink(link)
+	}
+	return v
 }
 
 // openURLCmd launches the system browser for url without blocking the TUI.

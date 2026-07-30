@@ -69,6 +69,7 @@ func (AppsDef) Actions() []resource.Action {
 					Title:  "logs/" + app.Name,
 					Follow: true,
 					Fetch:  appLogsFetch(c, app.URL),
+					Web:    appLogsLink(c.Profile().Host, app),
 				}
 			},
 		},
@@ -84,11 +85,15 @@ func (AppsDef) Tabs() []string { return []string{"details", "logs"} }
 // opens the view (the tabs then load/refresh) instead of dead-ending.
 func (AppsDef) EnterMsg(c *dbx.Clients, _ resource.Scope, row resource.Row) any {
 	app := appFromRow(row)
+	host := c.Profile().Host
 	return view.OpenTabsMsg{
 		Title: app.Name,
+		// Details links to the app's workspace page; logs links to the app's own
+		// `/logz` viewer, the web twin of the streamed records.
+		Web: appLink(host, app.Name),
 		Tabs: []view.TabSpec{
 			{Name: "details", Detail: func(context.Context) (any, error) { return app, nil }},
-			{Name: "logs", LogTable: &view.LogTableTabSpec{
+			{Name: "logs", Web: appLogsLink(host, app), LogTable: &view.LogTableTabSpec{
 				Follow: true,
 				Fetch:  appLogsFetch(c, app.URL),
 			}},

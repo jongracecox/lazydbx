@@ -507,6 +507,14 @@ func (b *Browser) describe() tea.Cmd {
 
 func (b *Browser) describeRow(row resource.Row) tea.Cmd {
 	def, clients, scope, th := b.def, b.clients, b.scope, b.th
+	// The detail screen keeps the row's `o` out-link, so `d` then `o` opens the
+	// same workspace page `o` would have from the list.
+	var link WebLink
+	if linker, ok := def.(resource.WebLinker); ok {
+		if url, ok := linker.WebURL(clients.Profile().Host, scope, row); ok {
+			link = WebLink{URL: url}
+		}
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -514,7 +522,9 @@ func (b *Browser) describeRow(row resource.Row) tea.Cmd {
 		if err != nil {
 			return FlashMsg{Level: FlashError, Text: fmt.Sprintf("describe: %v", err)}
 		}
-		return PushMsg{View: NewDescribe(th, def.Name()+"/"+row.ID, detail)}
+		d := NewDescribe(th, def.Name()+"/"+row.ID, detail)
+		d.SetWebLink(link)
+		return PushMsg{View: d}
 	}
 }
 

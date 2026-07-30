@@ -51,7 +51,7 @@ func (RunsDef) Actions() []resource.Action {
 			Key:      "l",
 			Name:     "logs",
 			NeedsRow: true,
-			Run: func(_ context.Context, c *dbx.Clients, _ resource.Scope, row resource.Row) any {
+			Run: func(_ context.Context, c *dbx.Clients, scope resource.Scope, row resource.Row) any {
 				runID, err := strconv.ParseInt(row.ID, 10, 64)
 				if err != nil {
 					return view.FlashMsg{Level: view.FlashError, Text: "bad run id " + row.ID}
@@ -64,6 +64,7 @@ func (RunsDef) Actions() []resource.Action {
 					Title:  "logs/run-" + row.ID,
 					Follow: follow,
 					Fetch:  runLogsFetch(c, runID),
+					Web:    jobRunLink(c.Profile().Host, scope["job"], row.ID),
 				}
 			},
 		},

@@ -28,6 +28,8 @@ import (
 // tea.Cmds; Update stays pure and drives the lifecycle through the private
 // messages defined at the bottom of this file.
 type SQLView struct {
+	webLink
+
 	th      theme.Theme
 	clients *dbx.Clients
 	sqlCfg  config.SQLConfig
@@ -218,6 +220,9 @@ func (v *SQLView) Hints() []key.Binding {
 			key.NewBinding(key.WithKeys("h"), key.WithHelp("h/l", "scroll ↔")),
 			key.NewBinding(key.WithKeys("home"), key.WithHelp("home/end", "page ↔")),
 		)
+		// `o` only exists with the results focused — with the editor focused the
+		// key belongs to the query text.
+		hints = append(hints, v.webHints()...)
 	}
 	return hints
 }
@@ -295,6 +300,10 @@ func (v *SQLView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "enter":
 		cmd := v.openRowDetail()
 		return v, cmd
+	case "o":
+		if cmd := v.openWeb(); cmd != nil {
+			return v, cmd
+		}
 	}
 	return v, nil
 }
