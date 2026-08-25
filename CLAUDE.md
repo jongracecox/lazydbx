@@ -100,7 +100,14 @@ Dependency direction: `cmd → app → ui/view → resource ← resources → db
 
 - Bubble Tea v2 import paths are `charm.land/...` (vanity), not `github.com/charmbracelet/...`.
 - v2 API: `View() tea.View` (set `v.AltScreen = true` in the view, not a program option); `lipgloss.Color(...)` is a constructor returning `color.Color`, not a type; keys match via `tea.KeyPressMsg.String()` (e.g. `"ctrl+r"`).
-- `ctrl+c` is reserved for quit (with confirm when work is in flight). SQL execute = `ctrl+e`, cancel = `ctrl+k`.
+- `ctrl+c` is reserved for quit (with confirm when work is in flight). SQL execute
+  = `shift+enter` **or** `ctrl+e`, cancel = `ctrl+k`. `shift+enter` only reaches
+  the app in terminals that speak the Kitty keyboard protocol / modifyOtherKeys2
+  (Bubble Tea requests both by default); elsewhere it arrives as a plain `enter`,
+  which is why `ctrl+e` stays bound as the universal fallback. Both are handled
+  in `SQLView.handleKey` before the editor/results focus split, so execute works
+  from either pane while plain `enter` keeps its per-focus meaning (newline in
+  the editor, row detail in the results).
 - Data viewer (`SQLView` results grid): the header line is **pinned** — `gridLines[0]` renders as a static line above the viewport; only `gridLines[1:]` (data rows) scroll (`renderResults`). Vertical keys move a **row cursor** (`selRow`, kept in view via `rowOff`/`SetYOffset`, highlighted with `Reverse(true).Bold(true)`), not the raw viewport: `j/k`+arrows = one row, `pgup/pgdn` = one page. Horizontal: `h/l`+arrows step `hStep` (6) cols, `home/end` page a near-screen width (`hPage`), all via `xoff` + `ansi.Cut`. `enter` pushes `view.RowDetail` — a scrollable COLUMN/VALUE list showing the selected row's full, untruncated, wrapped values (the grid truncates cells at `maxCell`). `esc` pops back. Both the grid body and `RowDetail` reserve a right-hand column for `component.Scrollbar` (shaded `█`/`░` bar) when content overflows — a pure formatter over viewport metrics (`TotalLineCount`/`VisibleLineCount`/`YOffset`); reuse it for any viewport-backed view.
 - Reserved single keys (do not bind in def Actions): global `q p a ? : J C P A`, browser `d s f t r j k o O /` (j/k = navigation, tab/shift+tab = cycle tabs *and* any internal focus stops (see the tab-conflict note below), `o` = open in browser when the def implements `resource.WebLinker`, `O` = secondary web link when it implements `resource.AltWebLinker` — apps use `o` for the workspace page and `O` for the deployed app; detail screens
 also bind `o` — see the `view.WebLink` note below). `a` opens the About splash (`view.About`: centred logo, build metadata, project URL, copyright), `?` opens help. Check `?` help for the live map.
