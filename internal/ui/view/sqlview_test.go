@@ -54,6 +54,8 @@ func sqlPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "ctrl+e":
 		return tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
+	case "shift+enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
 	case "ctrl+k":
 		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
 	case "ctrl+w":
@@ -152,6 +154,40 @@ func TestSQLExecuteHappyPath(t *testing.T) {
 	assert.Contains(t, out, "2 rows in 1.5s")
 	assert.Contains(t, out, "name")
 	assert.Contains(t, out, "alice")
+}
+
+// shift+enter is the ergonomic execute alias for ctrl+e; it must fire the
+// statement from either focus (the editor sees it before the textarea does,
+// and with the results focused plain enter still opens the row detail).
+func TestSQLExecuteShiftEnter(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		focus focusTarget
+	}{
+		{"editor", focusEditor},
+		{"results", focusResults},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var submitted string
+			daos := dbx.DAOs{Statements: &fakeStatements{
+				submit: func(_ context.Context, _, stmt string, _ int) (string, error) {
+					submitted = stmt
+					return "stmt-1", nil
+				},
+			}}
+			v := newSQLView(t, daos, "select 1", false)
+			v.warehouses = []dbx.Warehouse{{ID: "w1", Name: "wh"}}
+			v.wh, v.whOK = v.warehouses[0], true
+			v.focus = tc.focus
+
+			got, cmd := v.handleKey(sqlPress("shift+enter"))
+			sv := got.(*SQLView)
+			require.Equal(t, statePending, sv.state)
+			startMsg := runCmd(t, cmd).(stmtStartedMsg)
+			assert.Equal(t, "stmt-1", startMsg.id)
+			assert.Equal(t, "select 1", submitted)
+		})
+	}
 }
 
 func TestSQLFailurePath(t *testing.T) {

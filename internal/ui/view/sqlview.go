@@ -209,7 +209,7 @@ func (v *SQLView) Hints() []key.Binding {
 	}
 	hints := []key.Binding{
 		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "editor/results")),
-		key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl-e", "execute")),
+		key.NewBinding(key.WithKeys("shift+enter", "ctrl+e"), key.WithHelp("shift-enter/ctrl-e", "execute")),
 		key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl-k", "cancel")),
 		key.NewBinding(key.WithKeys("ctrl+w"), key.WithHelp("ctrl-w", "warehouse")),
 	}
@@ -259,7 +259,10 @@ func (v *SQLView) handleKey(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case "tab":
 		v.toggleFocus()
 		return v, nil
-	case "ctrl+e":
+	// shift+enter is the ergonomic execute; it only reaches us in terminals
+	// that support the Kitty keyboard protocol (elsewhere it arrives as a
+	// plain enter), so ctrl+e stays bound as the universal fallback.
+	case "shift+enter", "ctrl+e":
 		return v.execute()
 	case "ctrl+k":
 		return v.cancel()
@@ -734,7 +737,7 @@ func (v *SQLView) renderResults(width, height int) string {
 			v.vp.SetWidth(width)
 			v.vp.SetHeight(height)
 		}
-		v.vp.SetContent(v.th.Subtle.Render("no results — press ctrl+e to execute"))
+		v.vp.SetContent(v.th.Subtle.Render("no results — press shift+enter (or ctrl+e) to execute"))
 		return v.vp.View()
 	}
 

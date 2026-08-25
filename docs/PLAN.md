@@ -132,7 +132,7 @@ type ResourceDef interface {
 - Message taxonomy (all in `app/messages.go`): `navPushMsg/navPopMsg`, `dataMsg{key, rows, err, fetchedAt}`, `stmtSubmittedMsg/stmtPollMsg/stmtDoneMsg`, `statusFlashMsg`, `tickMsg` (500ms cosmetic heartbeat), `promptMsg`, `profileSwitchedMsg`. Views never mutate shared state — pure Updates returning msgs/cmds.
 - **Pollers run OUTSIDE the tea loop** (k9s pattern): engine gets `p.Send` as its sink. Browser Init emits `engine.Watch(key{profile,resource,scopeHash})` (refcounted). First watch: serve cached entry synchronously (stale-while-revalidate = instant paint), then poll goroutine: fetch now → tick at `PollInterval()` ±10% jitter → `atomic.Bool` overlap-drop → error backoff (double to 5m, keep stale rows + red badge). Unwatch on pop cancels goroutine; cache survives. `ctrl+r` = RefreshNow. SCIM resources: 15m interval, manual refresh.
 - **Exception**: statement polling is a per-view self-rescheduling `tea.Cmd` loop (800ms), not engine state; cancel key fires `CancelExecution`.
-- `ctrl+c` intercepted (Bubble Tea default-quits): confirm quit + auto-cancel in-flight statements. SQL execute = `ctrl+e`, cancel = `ctrl+k`.
+- `ctrl+c` intercepted (Bubble Tea default-quits): confirm quit + auto-cancel in-flight statements. SQL execute = `shift+enter` or `ctrl+e`, cancel = `ctrl+k`.
 
 ## Implementation phases (each ends runnable)
 
