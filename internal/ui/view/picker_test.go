@@ -20,7 +20,7 @@ func TestPickerSelectsProfile(t *testing.T) {
 		{Name: "alpha", Host: "https://a.cloud.databricks.com"},
 		{Name: "beta", Host: "https://b.cloud.databricks.com"},
 	}
-	p := NewPicker(theme.Default(), profiles)
+	p := NewPicker(theme.Default(), profiles, "")
 	p.Render(100, 20) // size the table so a row is selectable
 
 	v, cmd := p.Update(keyPress(tea.KeyEnter))
@@ -35,7 +35,7 @@ func TestPickerSelectsProfile(t *testing.T) {
 
 func TestPickerOpensColorPicker(t *testing.T) {
 	profiles := []dbx.Profile{{Name: "alpha", Host: "https://a.cloud.databricks.com"}}
-	p := NewPicker(theme.Default(), profiles)
+	p := NewPicker(theme.Default(), profiles, "")
 	p.Render(100, 20)
 
 	_, cmd := p.Update(keyPress('c'))
@@ -50,7 +50,7 @@ func TestPickerMovesCursor(t *testing.T) {
 		{Name: "alpha", Host: "https://a.cloud.databricks.com"},
 		{Name: "beta", Host: "https://b.cloud.databricks.com"},
 	}
-	p := NewPicker(theme.Default(), profiles)
+	p := NewPicker(theme.Default(), profiles, "")
 	p.Render(100, 20)
 
 	_, _ = p.Update(keyPress('j'))
@@ -58,4 +58,30 @@ func TestPickerMovesCursor(t *testing.T) {
 	require.NotNil(t, cmd)
 	sel := cmd().(ProfileSelectedMsg)
 	assert.Equal(t, "beta", sel.Profile.Name)
+}
+
+func TestPickerStartsOnCurrentProfile(t *testing.T) {
+	profiles := []dbx.Profile{
+		{Name: "alpha", Host: "https://a.cloud.databricks.com"},
+		{Name: "beta", Host: "https://b.cloud.databricks.com"},
+	}
+
+	p := NewPicker(theme.Default(), profiles, "beta")
+	p.Render(100, 20)
+	_, cmd := p.Update(keyPress(tea.KeyEnter))
+	require.NotNil(t, cmd)
+	sel, ok := cmd().(ProfileSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "beta", sel.Profile.Name, "the profile in use starts selected")
+
+	// No current profile (or an unknown one) leaves the first row selected.
+	for _, current := range []string{"", "gone"} {
+		p = NewPicker(theme.Default(), profiles, current)
+		p.Render(100, 20)
+		_, cmd = p.Update(keyPress(tea.KeyEnter))
+		require.NotNil(t, cmd)
+		sel, ok = cmd().(ProfileSelectedMsg)
+		require.True(t, ok)
+		assert.Equal(t, "alpha", sel.Profile.Name, current)
+	}
 }

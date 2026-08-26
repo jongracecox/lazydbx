@@ -179,3 +179,57 @@ func (r *Registry) Complete(prefix string) []string {
 	}
 	return out
 }
+
+// ScopeLister returns the resource that lists candidate values for scope arg
+// want[idx]: the def whose singular name matches the arg key and whose own arg
+// count equals idx (e.g. arg "catalog" at idx 0 → catalogs; "schema" at idx 1 →
+// schemas, itself scoped by a catalog). ok is false when no def qualifies.
+func (r *Registry) ScopeLister(want []string, idx int) (Def, bool) {
+	if idx < 0 || idx >= len(want) {
+		return nil, false
+	}
+	key := want[idx]
+	for _, name := range r.Canonical() {
+		def, ok := r.Get(name)
+		if ok && len(def.Args()) == idx && singular(def.Name()) == key {
+			return def, true
+		}
+	}
+	return nil, false
+}
+
+// ScopeLevel is one parent level of a scoped command: the list to show, the
+// scope to show it under, and the value that was chosen from it (the row to
+// land the cursor on).
+type ScopeLevel struct {
+	Def    Def
+	Scope  Scope
+	Select string
+}
+
+// ScopeAncestors returns the parent levels of a scoped command, outermost
+// first: one entry per scope arg, each the list the corresponding value was
+// picked from (`tables main silver` → catalogs with main selected, then main's
+// schemas with silver selected). Callers use it to build the navigation stack a
+// drill-down would have produced, so esc walks back up level by level onto the
+// row it came from. Levels with no matching lister (ScopeLister) are omitted.
+func (r *Registry) ScopeAncestors(def Def, scope Scope) []ScopeLevel {
+	want := def.Args()
+	out := make([]ScopeLevel, 0, len(want))
+	for idx := range want {
+		lister, ok := r.ScopeLister(want, idx)
+		if !ok {
+			continue
+		}
+		s := Scope{}
+		for _, key := range want[:idx] {
+			s[key] = scope[key]
+		}
+		out = append(out, ScopeLevel{Def: lister, Scope: s, Select: scope[want[idx]]})
+	}
+	return out
+}
+
+// singular strips a trailing plural "s" from a resource name so it matches the
+// singular scope-arg key it supplies (catalogs → catalog).
+func singular(name string) string { return strings.TrimSuffix(name, "s") }

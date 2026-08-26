@@ -64,6 +64,12 @@ type Browser struct {
 	autoOpenTab string
 	autoOpened  bool
 
+	// selectID, when set, is the row the cursor should land on once data
+	// arrives — how a stack seeded from the CLI (see app.launchViews) matches
+	// where a manual drill-down would have left each level's cursor. Cleared
+	// once applied.
+	selectID string
+
 	width, height int
 }
 
@@ -203,6 +209,7 @@ func (b *Browser) Update(msg tea.Msg) (View, tea.Cmd) {
 	if ev, ok := msg.(engine.DataEvent); ok {
 		if ev.Key == b.key {
 			b.applyData(ev)
+			b.maybeSelect()
 			if cmd := b.maybeAutoOpen(); cmd != nil {
 				return b, cmd
 			}
@@ -444,6 +451,38 @@ func (b *Browser) SetAutoOpen(id, tab string) {
 	b.autoOpenTab = tab
 }
 
+// SetSelect makes the browser put its cursor on the row named id (its ID or its
+// resource.RowNamer name) once data arrives, instead of the first row. Used to
+// seed the ancestors of a CLI launch so esc lands back on the row that was
+// navigated through.
+func (b *Browser) SetSelect(id string) { b.selectID = id }
+
+// maybeSelect applies a pending SetSelect once rows are in. It is a one-shot:
+// after the first loaded data the cursor belongs to the user (and SetData keeps
+// it on the same row across polls).
+func (b *Browser) maybeSelect() {
+	if b.selectID == "" || !b.loaded {
+		return
+	}
+	id := b.selectID
+	b.selectID = ""
+	if row, ok := b.findRow(id); ok {
+		b.table.SelectID(row.ID)
+	}
+}
+
+// findRow resolves a name to a loaded row, matching the row ID or the def's
+// human name (resource.RowNamer) — the same addressing SetAutoOpen accepts.
+func (b *Browser) findRow(name string) (resource.Row, bool) {
+	namer, _ := b.def.(resource.RowNamer)
+	for _, r := range b.allRows {
+		if r.ID == name || (namer != nil && namer.RowName(r) == name) {
+			return r, true
+		}
+	}
+	return resource.Row{}, false
+}
+
 // maybeAutoOpen fires the one-shot auto-open once the target row has loaded.
 // It waits through empty/cache loads; once rows are present without the target,
 // it gives up with a flash so a bad name doesn't hang on the list silently.
@@ -451,12 +490,11 @@ func (b *Browser) maybeAutoOpen() tea.Cmd {
 	if b.autoOpened || b.autoOpenID == "" || !b.loaded {
 		return nil
 	}
-	namer, _ := b.def.(resource.RowNamer)
-	for _, r := range b.allRows {
-		if r.ID == b.autoOpenID || (namer != nil && namer.RowName(r) == b.autoOpenID) {
-			b.autoOpened = true
-			return b.enterRowTab(r, b.autoOpenTab)
-		}
+	if r, ok := b.findRow(b.autoOpenID); ok {
+		b.autoOpened = true
+		// Leave the cursor on the opened row so esc comes back to it.
+		b.table.SelectID(r.ID)
+		return b.enterRowTab(r, b.autoOpenTab)
 	}
 	if len(b.allRows) > 0 {
 		id := b.autoOpenID

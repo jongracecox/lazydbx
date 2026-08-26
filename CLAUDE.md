@@ -26,10 +26,31 @@ go run ./cmd/lazydbx -p <name> apps my-app --tab logs   # open item onto a tab
 
 Positional launch args (`lazydbx [flags] [resource [args...] [item] [/filter]]`)
 reuse the `:` command grammar via `registry.ParseArgs`; the parsed command
-replaces the default browser above the picker on the first profile selection
-(`esc` → picker). Args are passed to `app.New` as a `[]string` (not a joined
+replaces the default browser above the picker on the first profile selection.
+A scoped launch also seeds the levels above it — `registry.ScopeAncestors` maps
+each of `Def.Args()` to a `resource.ScopeLevel{Def, Scope, Select}`: the
+resource that lists that arg (`catalog` → catalogs, `schema` → schemas scoped by
+that catalog, via `Registry.ScopeLister`'s singular-name match, also used by
+shell completion) plus the value chosen from it. So `tables main.silver` opens
+with the stack `profiles → catalogs → main → silver`: breadcrumbs show the full
+path and `esc` walks back up a level at a time. Each seeded level gets
+`Browser.SetSelect(value)` so `esc` reveals it with the cursor already on the row
+it came from (a one-shot applied on first load, matching `Row.ID` or
+`resource.RowNamer` like auto-open; `component.Table.SelectID` moves the
+cursor). Auto-open does the same for the launch item, so `esc` out of an opened
+item returns to its row rather than the top of the list. The picker is the same
+idea at the top of the stack: `view.NewPicker(th, profiles, current)` starts on
+the profile in use (`app.currentProfile`), so `esc` all the way up — or `p` /
+`ctrl+p` — lands on the current profile. `Model.Init` (and the
+`ProfileSelectedMsg` handler) therefore init **every** view on the stack, not
+just the top, and `engine.DataEvent` is **broadcast** to the whole stack
+(`Model.broadcast`) rather than forwarded to the top view — data is addressed by
+`engine.Key`, and every view below the top (launch ancestors, drill-down
+parents) keeps watching its own key, so a revealed ancestor already has its rows
+instead of sitting on "loading …". Keys and everything else still go to the top
+view only. Args are passed to `app.New` as a `[]string` (not a joined
 string) so a quoted item name with spaces survives. Validation lives in
-`validateLaunch` (cmd, pre-TUI stderr errors) mirrored by `app.launchView`
+`validateLaunch` (cmd, pre-TUI stderr errors) mirrored by `app.launchViews`
 (in-app fallback). Root uses `cobra.ArbitraryArgs` so args fall through to `RunE`
 while `version`/`completion`/`__prefetch` still route as subcommands.
 

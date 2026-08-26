@@ -65,7 +65,7 @@ type Model struct {
 // launchArgs is an optional tokenized command (same grammar as the ':' bar)
 // opened in place of the default resource on the first profile selection; empty
 // opens the default. launchTab is the optional `--tab` selection applied when
-// the launch command auto-opens a specific item (see launchView).
+// the launch command auto-opens a specific item (see launchViews).
 func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry, pool *dbx.Pool, eng *engine.Engine, launchArgs []string, launchTab string) Model {
 	m := Model{
 		cfg:        cfg,
@@ -88,7 +88,7 @@ func New(cfg config.Config, profiles []dbx.Profile, registry *resource.Registry,
 			}
 		}
 	}
-	m.stack = []view.View{view.NewPicker(m.th, profiles)}
+	m.stack = []view.View{view.NewPicker(m.th, profiles, cfg.Profile)}
 	return m
 }
 
@@ -102,33 +102,51 @@ func (m *Model) selectProfile(p dbx.Profile) {
 	for _, v := range m.stack {
 		v.Close()
 	}
-	m.stack = []view.View{view.NewPicker(m.th, m.profiles)}
-	if v, ok := m.launchView(); ok {
-		m.stack = append(m.stack, v)
+	m.stack = []view.View{view.NewPicker(m.th, m.profiles, p.Name)}
+	if views := m.launchViews(); len(views) > 0 {
+		m.stack = append(m.stack, views...)
 	} else if def, ok := m.registry.Get(defaultResource); ok {
 		m.stack = append(m.stack, m.newBrowser(def, resource.Scope{}, ""))
 	}
 }
 
-// launchView builds the initial view from the CLI launch command, mirroring
-// exec's routing. It consumes m.launch so it only ever affects the first
-// profile selection; a parse error flashes and falls back to the default view.
-// Keep in sync with validateLaunch in cmd/lazydbx (which pre-checks at startup).
-func (m *Model) launchView() (view.View, bool) {
+// launchViews builds the initial view stack from the CLI launch command,
+// mirroring exec's routing. It consumes m.launchArgs so it only ever affects
+// the first profile selection; a parse error flashes and falls back to the
+// default view (an empty result). The launch target is preceded by the
+// browsers a manual drill-down would have passed through (catalogs, then the
+// catalog's schemas, for `tables main silver`) so the breadcrumbs show the
+// full path and esc walks back up level by level instead of jumping straight
+// to the profile picker. Keep in sync with validateLaunch in cmd/lazydbx
+// (which pre-checks at startup).
+func (m *Model) launchViews() []view.View {
 	args := m.launchArgs
 	m.launchArgs = nil
 	if len(args) == 0 {
-		return nil, false
+		return nil
 	}
 	if args[0] == "sql" {
 		query := strings.TrimSpace(strings.Join(args[1:], " "))
-		return view.NewSQLView(m.th, m.clients, m.cfg.SQL, query, false), true
+		return []view.View{view.NewSQLView(m.th, m.clients, m.cfg.SQL, query, false)}
 	}
 	cmd, err := m.registry.ParseArgs(args)
 	if err != nil {
 		m.statusbar.Flash(component.FlashError, err.Error(), time.Now())
-		return nil, false
+		return nil
 	}
+
+	ancestors := m.registry.ScopeAncestors(cmd.Def, cmd.Scope)
+	views := make([]view.View, 0, len(ancestors)+1)
+	for _, a := range ancestors {
+		v := m.newBrowser(a.Def, a.Scope, "")
+		// Land each level's cursor on the value the launch drilled through, so
+		// esc reveals the list already sitting on the row it came from.
+		if br, ok := v.(*view.Browser); ok {
+			br.SetSelect(a.Select)
+		}
+		views = append(views, v)
+	}
+
 	v := m.newBrowser(cmd.Def, cmd.Scope, cmd.Filter)
 	// A positional item selector opens that row directly rather than leaving the
 	// user on the list; the requested tab (if any) rides along.
@@ -137,7 +155,7 @@ func (m *Model) launchView() (view.View, bool) {
 			br.SetAutoOpen(cmd.Item, m.launchTab)
 		}
 	}
-	return v, true
+	return append(views, v)
 }
 
 // completer feeds the command bar: an empty prompt lists every canonical
@@ -155,6 +173,14 @@ func (m Model) newBrowser(def resource.Def, scope resource.Scope, filter string)
 	return view.NewBrowser(def, scope, m.clients, m.eng, m.th, filter, m.favs)
 }
 
+// currentProfile names the profile in use, or "" before the first selection.
+func (m Model) currentProfile() string {
+	if m.clients == nil {
+		return ""
+	}
+	return m.clients.Profile().Name
+}
+
 func (m Model) top() view.View {
 	if len(m.stack) == 0 {
 		return nil
@@ -162,11 +188,14 @@ func (m Model) top() view.View {
 	return m.stack[len(m.stack)-1]
 }
 
-// Init starts the heartbeat and the first view.
+// Init starts the heartbeat and every view on the stack. A CLI launch seeds
+// the stack with the target's ancestor browsers too (see launchViews); they are
+// initialised here so their data is loaded when esc reveals them, mirroring a
+// manual drill-down where each level was initialised on the way down.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tick()}
-	if top := m.top(); top != nil {
-		cmds = append(cmds, top.Init())
+	for _, v := range m.stack {
+		cmds = append(cmds, v.Init())
 	}
 	return tea.Batch(cmds...)
 }
@@ -251,10 +280,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case view.ProfileSelectedMsg:
 		m.selectProfile(msg.Profile)
 		m.statusbar.Flash(component.FlashInfo, "profile: "+msg.Profile.Name, time.Now())
-		if top := m.top(); top != nil {
-			return m, top.Init()
+		cmds := make([]tea.Cmd, 0, len(m.stack))
+		for _, v := range m.stack {
+			cmds = append(cmds, v.Init())
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case view.OpenColorPickerMsg:
 		return m.push(view.NewColorPicker(m.th, msg.Profile, m.cfg.Skins[msg.Profile]))
@@ -272,6 +302,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case engine.DataEvent:
+		// Data goes to every view on the stack, not just the top: views below
+		// keep watching their keys (a drill-down parent, or the ancestors a CLI
+		// launch seeds) and would otherwise sit on "loading …" forever once
+		// revealed. Each view ignores events for keys other than its own.
+		return m.broadcast(msg)
 	}
 
 	return m.forward(msg)
@@ -345,7 +382,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "p", "ctrl+p":
 		if _, isPicker := m.top().(*view.Picker); !isPicker {
-			return m.push(view.NewPicker(m.th, m.profiles))
+			return m.push(view.NewPicker(m.th, m.profiles, m.currentProfile()))
 		}
 		return m, nil
 	case "q", "ctrl+c":
@@ -396,6 +433,19 @@ func (m Model) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 	v, cmd := m.top().Update(msg)
 	m.stack[len(m.stack)-1] = v
 	return m, cmd
+}
+
+// broadcast sends a message to every view on the stack, batching their
+// commands. Used for engine data, which is addressed by key rather than by
+// whichever view happens to be on top.
+func (m Model) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := make([]tea.Cmd, 0, len(m.stack))
+	for i, v := range m.stack {
+		updated, cmd := v.Update(msg)
+		m.stack[i] = updated
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) push(v view.View) (tea.Model, tea.Cmd) {

@@ -61,11 +61,6 @@ func TestZipScope(t *testing.T) {
 	assert.Empty(t, zipScope([]string{"catalog"}, nil))
 }
 
-func TestSingular(t *testing.T) {
-	assert.Equal(t, "catalog", singular("catalogs"))
-	assert.Equal(t, "job", singular("jobs"))
-}
-
 func TestRowNamerProjection(t *testing.T) {
 	reg := resources.NewRegistry()
 

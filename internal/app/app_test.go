@@ -151,6 +151,18 @@ func TestLaunchArgsSQLOpensEditor(t *testing.T) {
 	assert.True(t, isSQL, "sql launch opens the SQL editor")
 }
 
+func TestLaunchArgsSeedAncestorStack(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, []string{"tables", "main.silver"}, "")
+	// picker → catalogs → main's schemas → silver's tables: esc walks back up
+	// one level at a time instead of jumping to the picker.
+	assert.Equal(t, []string{"profiles", "catalogs", "main", "silver"}, m.titles())
+}
+
+func TestLaunchArgsUnscopedResourceHasNoAncestors(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, []string{"jobs"}, "")
+	assert.Equal(t, []string{"profiles", "jobs"}, m.titles())
+}
+
 func TestLaunchArgsConsumedOnce(t *testing.T) {
 	m := newModel(t, config.Config{Profile: "dev"}, []string{"jobs"}, "")
 	require.Equal(t, "jobs", topTitle(m))
@@ -441,4 +453,44 @@ func TestHelpViewIncludesResourceCatalog(t *testing.T) {
 	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
 	h := m.helpView()
 	assert.Equal(t, "help", h.Title())
+}
+
+// stubView records the messages it is handed, to observe app-level routing.
+type stubView struct {
+	title string
+	seen  []tea.Msg
+}
+
+func (v *stubView) Init() tea.Cmd { return nil }
+func (v *stubView) Update(msg tea.Msg) (view.View, tea.Cmd) {
+	v.seen = append(v.seen, msg)
+	return v, nil
+}
+func (v *stubView) Render(int, int) string { return "" }
+func (v *stubView) Title() string          { return v.title }
+func (v *stubView) Hints() []key.Binding   { return nil }
+func (v *stubView) Close()                 {}
+
+func TestDataEventsReachViewsBelowTheTop(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
+	below, top := &stubView{title: "below"}, &stubView{title: "top"}
+	m.stack = []view.View{below, top}
+
+	ev := engine.DataEvent{Key: engine.Key{Resource: "schemas"}}
+	m = update(m, ev)
+
+	// Ancestors keep watching their own keys, so they must see the data too —
+	// otherwise they sit on "loading …" when esc reveals them.
+	assert.Equal(t, []tea.Msg{ev}, below.seen)
+	assert.Equal(t, []tea.Msg{ev}, top.seen)
+}
+
+func TestKeysOnlyReachTheTopView(t *testing.T) {
+	m := newModel(t, config.Config{Profile: "dev"}, nil, "")
+	below, top := &stubView{title: "below"}, &stubView{title: "top"}
+	m.stack = []view.View{below, top}
+
+	m = update(m, keyMsg("x"))
+	assert.Empty(t, below.seen, "input stays with the focused view")
+	assert.Len(t, top.seen, 1)
 }

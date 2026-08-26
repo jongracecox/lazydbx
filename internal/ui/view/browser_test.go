@@ -297,3 +297,53 @@ func TestBrowserTitleAndScopePath(t *testing.T) {
 		})
 	}
 }
+
+func TestBrowserSetSelectLandsOnRow(t *testing.T) {
+	b := newTestBrowser(crumbDef{name: "schemas", cols: []resource.Column{{Title: "NAME"}}}, resource.Scope{})
+	b.SetSelect("silver")
+
+	b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "bronze", Cells: []string{"bronze"}},
+		{ID: "silver", Cells: []string{"silver"}},
+		{ID: "gold", Cells: []string{"gold"}},
+	}})
+	assert.Equal(t, "silver", b.table.SelectedID(), "the seeded row is selected, not the first")
+
+	// One-shot: a later poll must not drag the cursor back.
+	b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "bronze", Cells: []string{"bronze"}},
+		{ID: "silver", Cells: []string{"silver"}},
+	}})
+	assert.Equal(t, "silver", b.table.SelectedID())
+}
+
+func TestBrowserSetSelectUnknownRowKeepsFirst(t *testing.T) {
+	b := newTestBrowser(crumbDef{name: "schemas", cols: []resource.Column{{Title: "NAME"}}}, resource.Scope{})
+	b.SetSelect("nope")
+
+	b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{{ID: "bronze", Cells: []string{"bronze"}}}})
+	assert.Equal(t, "bronze", b.table.SelectedID())
+}
+
+func TestBrowserSetSelectByName(t *testing.T) {
+	b := newTestBrowser(namedOpenerDef{tabsOpenerDef{crumbDef{name: "jobs", cols: []resource.Column{{Title: "NAME"}}}}}, resource.Scope{})
+	b.SetSelect("Nightly ETL")
+
+	b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "7", Cells: []string{"Hourly"}},
+		{ID: "42", Cells: []string{"Nightly ETL"}},
+	}})
+	assert.Equal(t, "42", b.table.SelectedID(), "matches the human name like auto-open does")
+}
+
+func TestBrowserAutoOpenLeavesCursorOnRow(t *testing.T) {
+	b := newTestBrowser(openerDef{crumbDef{name: "apps", cols: []resource.Column{{Title: "NAME"}}}}, resource.Scope{})
+	b.SetAutoOpen("beta", "")
+
+	_, cmd := b.Update(engine.DataEvent{Key: b.key, Rows: []resource.Row{
+		{ID: "alpha", Cells: []string{"alpha"}},
+		{ID: "beta", Cells: []string{"beta"}},
+	}})
+	require.NotNil(t, cmd)
+	assert.Equal(t, "beta", b.table.SelectedID(), "esc from the opened item returns to its row")
+}
