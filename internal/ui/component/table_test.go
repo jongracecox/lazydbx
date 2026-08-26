@@ -212,3 +212,14 @@ func TestCellLess(t *testing.T) {
 		assert.Equal(t, tt.want, cellLess(tt.a, tt.b), "%q < %q", tt.a, tt.b)
 	}
 }
+
+func TestTableSelectID(t *testing.T) {
+	tbl := testTable(t)
+
+	assert.True(t, tbl.SelectID("gamma"))
+	assert.Equal(t, "gamma", tbl.SelectedID())
+
+	assert.False(t, tbl.SelectID("nope"))
+	assert.False(t, tbl.SelectID(""))
+	assert.Equal(t, "gamma", tbl.SelectedID(), "a miss leaves the cursor alone")
+}

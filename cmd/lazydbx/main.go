@@ -114,7 +114,7 @@ func run(cmd *cobra.Command, cfg config.Config, registry *resource.Registry, lau
 	}
 
 	// Validate the launch command up front so a typo prints a clean error to
-	// stderr rather than a flash behind the alt-screen (mirrors app.launchView).
+	// stderr rather than a flash behind the alt-screen (mirrors app.launchViews).
 	if err := validateLaunch(registry, launchArgs, launchTab); err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func run(cmd *cobra.Command, cfg config.Config, registry *resource.Registry, lau
 // TUI starts. No args and the special `sql` command are always accepted as
 // launch commands; anything else must parse as a resource command. A --tab
 // selection additionally requires a resource with named tabs and a specific
-// item to open. Keep in sync with app.launchView.
+// item to open. Keep in sync with app.launchViews.
 func validateLaunch(reg *resource.Registry, args []string, tab string) error {
 	tab = strings.TrimSpace(tab)
 	if len(args) == 0 || args[0] == "sql" {

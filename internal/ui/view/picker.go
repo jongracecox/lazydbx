@@ -32,10 +32,14 @@ type Picker struct {
 	table    component.Table
 }
 
-// NewPicker builds the profile picker.
-func NewPicker(th theme.Theme, profiles []dbx.Profile) *Picker {
+// NewPicker builds the profile picker. current names the profile in use (empty
+// before the first selection); its row starts selected, so re-opening the
+// picker — or walking `esc` all the way up — lands on where you are rather than
+// the top of the list.
+func NewPicker(th theme.Theme, profiles []dbx.Profile, current string) *Picker {
 	p := &Picker{th: th, profiles: profiles, table: component.NewTable(th)}
 	p.table.SetData(resource.Cols(pickerCols), p.rows())
+	p.table.SelectID(current)
 	return p
 }
 

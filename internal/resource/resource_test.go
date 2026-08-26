@@ -163,3 +163,47 @@ func TestRowMatchesFilter(t *testing.T) {
 	assert.True(t, row.MatchesFilter("EXAMPLE"))
 	assert.False(t, row.MatchesFilter("prod"))
 }
+
+func TestScopeAncestors(t *testing.T) {
+	r := newTestRegistry(t)
+	r.MustRegister(stubDef{name: "schemas", args: []string{"catalog"}})
+	tables, _ := r.Get("tables")
+
+	got := r.ScopeAncestors(tables, Scope{"catalog": "main", "schema": "silver"})
+	require.Len(t, got, 2)
+	assert.Equal(t, "catalogs", got[0].Def.Name())
+	assert.Equal(t, Scope{}, got[0].Scope)
+	assert.Equal(t, "main", got[0].Select, "the catalog list lands on the chosen catalog")
+	assert.Equal(t, "schemas", got[1].Def.Name())
+	assert.Equal(t, Scope{"catalog": "main"}, got[1].Scope, "the schema list is scoped by the chosen catalog")
+	assert.Equal(t, "silver", got[1].Select)
+
+	// An unscoped resource has no levels above it.
+	catalogs, _ := r.Get("catalogs")
+	assert.Empty(t, r.ScopeAncestors(catalogs, Scope{}))
+}
+
+func TestScopeAncestorsSkipsMissingListers(t *testing.T) {
+	// No "schemas" def registered, so that level is simply omitted.
+	r := newTestRegistry(t)
+	tables, _ := r.Get("tables")
+
+	got := r.ScopeAncestors(tables, Scope{"catalog": "main", "schema": "silver"})
+	require.Len(t, got, 1)
+	assert.Equal(t, "catalogs", got[0].Def.Name())
+}
+
+func TestScopeLister(t *testing.T) {
+	r := newTestRegistry(t)
+	tables, _ := r.Get("tables")
+	want := tables.Args()
+
+	def, ok := r.ScopeLister(want, 0)
+	require.True(t, ok)
+	assert.Equal(t, "catalogs", def.Name())
+
+	_, ok = r.ScopeLister(want, 1) // no schemas def registered
+	assert.False(t, ok)
+	_, ok = r.ScopeLister(want, 2) // out of range
+	assert.False(t, ok)
+}

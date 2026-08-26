@@ -128,19 +128,13 @@ func prefetchCmd(reg *resource.Registry) *cobra.Command {
 }
 
 // scopeArgLister finds the resource that lists candidate values for scope arg
-// want[idx], plus the scope it should be listed under (the earlier args). The
-// lister is the resource whose singular name matches the arg key and whose own
-// arg count equals idx (e.g. arg "catalog" at idx 0 → catalogs; "schema" at
-// idx 1 → schemas scoped by the chosen catalog).
+// want[idx], plus the scope it should be listed under (the earlier args).
 func scopeArgLister(reg *resource.Registry, want, provided []string, idx int) (resource.Def, resource.Scope, bool) {
-	key := want[idx]
-	for _, name := range reg.Canonical() {
-		def, ok := reg.Get(name)
-		if ok && len(def.Args()) == idx && singular(def.Name()) == key {
-			return def, zipScope(want[:idx], provided[:idx]), true
-		}
+	def, ok := reg.ScopeLister(want, idx)
+	if !ok {
+		return nil, nil, false
 	}
-	return nil, nil, false
+	return def, zipScope(want[:idx], provided[:idx]), true
 }
 
 // completeRemote returns a resource's item names for completion, served from
@@ -283,10 +277,6 @@ func zipScope(keys, vals []string) resource.Scope {
 	}
 	return scope
 }
-
-// singular strips a trailing plural "s" from a resource name so it matches the
-// scope-arg key it lists (catalogs→catalog, jobs→job).
-func singular(name string) string { return strings.TrimSuffix(name, "s") }
 
 // filterPrefix keeps candidates matching the current partial word. Cobra's
 // shell scripts also filter, but doing it here keeps behavior identical across

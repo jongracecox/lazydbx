@@ -114,6 +114,21 @@ func (t *Table) SetData(cols []resource.Column, rows []resource.Row) {
 	}
 }
 
+// SelectID moves the cursor onto the row with the given ID, reporting whether
+// it was found (a filtered-out or not-yet-loaded row is not).
+func (t *Table) SelectID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for i, r := range t.rows {
+		if r.ID == id {
+			t.tbl.SetCursor(i)
+			return true
+		}
+	}
+	return false
+}
+
 // InSortMode reports whether the column picker is active; while true the
 // owning view should route all key input to the table.
 func (t Table) InSortMode() bool { return t.sortMode }
