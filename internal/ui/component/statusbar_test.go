@@ -73,3 +73,28 @@ func TestBreadcrumbs(t *testing.T) {
 
 	assert.Empty(t, Breadcrumbs(th, nil))
 }
+
+// TestStatusBarLeavesLastColumnBlank pins the wrap fix: the bar is the last
+// line of the frame, so writing its final cell parks the cursor in the
+// terminal's pending-wrap state and terminals that mishandle that scroll the
+// whole frame. The freshness timer exposed it — Bubble Tea only repaints that
+// cell when the line shifts, which is what "9s ago" → "10s ago" does.
+func TestStatusBarLeavesLastColumnBlank(t *testing.T) {
+	th := theme.Default()
+	now := time.Now()
+	const width = 40
+
+	for _, right := range []string{
+		"", "3/3  ⟳ 9s ago", "3/3  ⟳ 10s ago", "3/3  ⟳ 16m40s ago",
+		"a right status long enough to need clamping at this width",
+	} {
+		out := StatusBar{}.Render(th, width, "<profiles> <catalogs>", right, now)
+		assert.Less(t, lipgloss.Width(out), width,
+			"never paint the final column (right=%q)", right)
+	}
+
+	// Degenerate widths must not produce an empty or negative-width render.
+	for _, w := range []int{0, 1, 2} {
+		assert.NotPanics(t, func() { StatusBar{}.Render(th, w, "l", "r", now) })
+	}
+}

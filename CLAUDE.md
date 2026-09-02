@@ -149,6 +149,16 @@ also bind `o` — see the `view.WebLink` note below). `a` opens the About splash
   `o` only with the **results** focused — with the editor focused `o` is a typed
   character.
 - **Navigation best practice — resolving `tab` conflicts:** when a view inside a `Tabbed` container also wants `tab` for its own focus movement (e.g. `SQLView`'s editor↔results split), do NOT let the two fight over the key. Instead fold the view's internal focus stops into the global cycle: implement `view.TabCycler` (`AdvanceFocus(forward)` moves internal focus and returns `true`, or `false` at its boundary so the container switches tabs; `EnterFocus(forward)` lands on the entry stop when the cycle arrives). `Tabbed.cycle` walks columns → data-editor → data-results → details on `tab` and reverses on `shift+tab` (this is the only tab-switch key — `[`/`]` are *not* bound). A view keeps its own `tab` handler only for standalone (non-tabbed) use, e.g. `SQLView` via `OpenSQLMsg`. Apply the same pattern to any future screen with a `tab`-key conflict.
+- **Never paint the terminal's last column on the bottom line.** `component.StatusBar.Render`
+  lays the bar out in `width-1` and leaves the final cell blank on purpose. The status bar is
+  the last line of the frame, so its final character sits in the bottom-right cell; writing
+  there parks the cursor in the pending-wrap state, and a terminal that mishandles that wraps
+  the line and scrolls the whole frame up by one. Bubble Tea's diff renderer only repaints that
+  cell when the line's content *shifts*, which is exactly what the freshness timer does when it
+  grows a digit — so the corruption surfaced as "`9s ago` → `10s ago` breaks the layout" (it
+  also fired on each refresh, when `⟳ refreshing…` swaps back to `⟳ 0s ago`). Verify with a pty
+  capture: a healthy frame contains **no** `ESC[?7l` autowrap guards, because nothing reaches
+  the last column.
 - teatest goldens: pin terminal size and color profile in `TestMain`, inject the clock for "Ns ago" badges; `.gitattributes` marks `*.golden -text`.
 - Rate limits: workspace SCIM ≈4 req/s (identity resources use 15m poll + manual refresh), jobs list 20/s. Respect per-resource `PollInterval()`.
 - `~/.databrickscfg` may contain non-profile sections like `[__settings__]` — the profile parser must skip them.
